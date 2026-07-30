@@ -176,21 +176,8 @@ public static class Content
     /// <summary>
     ///     Whether the difficulty was found in the <see cref="ContentName" />.
     /// </summary>
-    private static bool ContentDifficultyFromNameResolved
-    {
-        get
-        {
-            if(ContentFinderConditionRow is null)
-                return false;
-
-            var contentName =
-                ContentFinderConditionRow.Value.Name.ToString().ToLower();
-
-            return contentName.Contains(" (hard") ||
-                   contentName.Contains(" (extreme") ||
-                   contentName.Contains(" (savage");
-        }
-    }
+    private static bool ContentDifficultyFromNameResolved =>
+        ContentDifficultyFromName is not null;
 
     /// <summary>
     ///     The title case difficulty of the content as found in the
@@ -201,13 +188,53 @@ public static class Content
     ///     <see cref="ContentDifficultyFromNameResolved">resolved</see> or when
     ///     <see cref="ContentFinderConditionRow" /> is null.
     /// </value>
-    public static string? ContentDifficultyFromName =>
-        ContentFinderConditionRow is null
-            ? null
-            : ContentDifficultyFromNameResolved
-                ? ContentFinderConditionRow?.Name.ToString().Split('(').Last()
-                    .TrimEnd(')').Trim()
-                : null;
+    /// <remarks>
+    ///     台服(TC)注意:我們的 Dalamud fork 的 Lumina 會把指定語言的 Excel
+    ///     請求靜默改成 client 語言,因此本類以 <c>Language.English</c> 取得的表
+    ///     實際上是繁中資料,英文括號後綴(" (savage" 等)永遠比對不到,
+    ///     需另以繁中命名規則判定(見 <see cref="ContentDifficultyFromNameTC" />)。
+    /// </remarks>
+    public static string? ContentDifficultyFromName
+    {
+        get
+        {
+            if(ContentFinderConditionRow is null)
+                return null;
+
+            var contentName = ContentFinderConditionRow.Value.Name.ToString();
+            var lowered = contentName.ToLower();
+            if(lowered.Contains(" (hard") ||
+               lowered.Contains(" (extreme") ||
+               lowered.Contains(" (savage"))
+                return contentName.Split('(').Last().TrimEnd(')').Trim();
+
+            return ContentDifficultyFromNameTC(contentName);
+        }
+    }
+
+    /// <summary>
+    ///     台服 CFC 名稱的難度關鍵字判定,回傳與英文分支相同的難度 token。<br />
+    ///     零式=Savage(7.20 dump 實查:60 個零式 raid 全中、零誤中;舊零式
+    ///     HighEndDuty=false,無法數值判定);「極 」/「極王」前綴與
+    ///     「究極幻想/蒼天幻想/終極之戰」(吟遊詩人的敘事詩系列)=Extreme;
+    ///     「真 」前綴=Hard。<br />
+    ///     刻意不用 Contains("極"):會誤中「究極武器破壞作戰」(普通難度)與
+    ///     「極惡之人木枯」(單人任務戰鬥);也不用 Contains("幻想"):會誤中
+    ///     「迦巴勒幻想圖書館」等迷宮。台服困難迷宮無命名標記(如「騷亂坑道
+    ///     銅鈴銅山」),維持 Normal——與消費端的難度分組(Casual/SoftCore)等價。
+    /// </summary>
+    private static string? ContentDifficultyFromNameTC(string contentName)
+    {
+        if(contentName.Contains("零式"))
+            return "Savage";
+        if(contentName.StartsWith("極 ") || contentName.StartsWith("極王") ||
+           contentName.StartsWith("究極幻想") || contentName.StartsWith("蒼天幻想") ||
+           contentName == "終極之戰")
+            return "Extreme";
+        if(contentName.StartsWith("真 "))
+            return "Hard";
+        return null;
+    }
 
     /// <summary>
     ///     The Sheet row for the current <see cref="InstanceContent" />.
