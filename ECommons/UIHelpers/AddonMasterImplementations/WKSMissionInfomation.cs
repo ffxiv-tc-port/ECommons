@@ -24,22 +24,37 @@ public partial class AddonMaster
             }
         }
 
-        public uint CurrentScore
+        /// <summary>
+        /// 目前任務分數。讀不到(AtkValues 未載入、型別不是字串、或解析失敗)時回 null,
+        /// 讓呼叫端能區分「還沒有資料」與「分數是 0」。
+        /// </summary>
+        /// <remarks>
+        /// 移植自上游 NightmareXIV/ECommons 的加固:c2a54c5(改 uint? + 邊界檢查 + null 檢查)
+        /// 與 2d8d2f4(補 AtkValue 型別檢查)。原寫法對 AtkValues[2].String.Value 無檢查直接
+        /// 解參考,型別不符時讀到的是垃圾指標。上游的邊界檢查寫 AtkValuesCount &lt; 2,
+        /// 但這裡讀的是索引 2,正確下界是 3 —— 半套邊界檢查是本艦隊踩過的雷,這裡取正確值。
+        /// </remarks>
+        public uint? CurrentScore
         {
             get
             {
-                var rawValue = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[2].String.Value).GetText();
+                if(Addon->AtkValuesCount < 3 || !Addon->AtkValues[2].IsString())
+                    return null;
+
+                var rawValue = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[2].String.Value);
+                if(rawValue == null)
+                    return null;
 
                 // Number coversion test #1.
-                if(uint.TryParse(rawValue, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var result))
+                if(uint.TryParse(rawValue.TextValue, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var result))
                     return result;
 
                 // Fallback: if the first test fails
-                var cleanedValue = System.Text.RegularExpressions.Regex.Replace(rawValue, @"[^\d]", "");
+                var cleanedValue = System.Text.RegularExpressions.Regex.Replace(rawValue.TextValue, @"[^\d]", "");
                 if(uint.TryParse(cleanedValue, out result))
                     return result;
 
-                return 0; // fallback if parsing fails
+                return null; // 解析失敗:回 null 而不是假的 0
             }
         }
 

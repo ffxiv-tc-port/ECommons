@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
 
 namespace ECommons;
 public static unsafe partial class GenericHelpers
@@ -149,5 +150,21 @@ public static unsafe partial class GenericHelpers
             AddonPtr = (T*)a.Address;
             return true;
         }
+    }
+
+    // 移植自上游 NightmareXIV/ECommons 2d8d2f4(AtkValue 型別檢查輔助)。
+    public static bool IsString(this ValueType type)
+    {
+        return type == ValueType.String || type == ValueType.String8 || type == ValueType.WideString || type == ValueType.ManagedString;
+    }
+
+    public static bool IsString(this AtkValue value)
+    {
+        var type = value.Type;
+        if(type == ValueType.String || type == ValueType.String8 || type == ValueType.WideString || type == ValueType.ManagedString)
+        {
+            return value.String.HasValue;
+        }
+        return false;
     }
 }
