@@ -60,6 +60,7 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
 
     protected bool ClickButtonIfEnabled(AtkComponentButton* button)
     {
+        if(button == null) return false;
         if(button->IsEnabled && button->AtkResNode->IsVisible())
         {
             button->ClickAddonButton(Base);

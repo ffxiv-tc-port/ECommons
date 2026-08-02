@@ -106,6 +106,7 @@ public abstract unsafe class AtkReader(AtkUnitBase* UnitBase, int BeginOffset = 
 
     private void EnsureCount(AtkUnitBase* Addon, int num)
     {
+        if(Addon->AtkValues == null) throw new ArgumentOutOfRangeException(nameof(num), $"Addon {GenericHelpers.Read(Addon->Name)} has a null AtkValues array (AtkValuesCount={Addon->AtkValuesCount})");
         if(num >= Addon->AtkValuesCount) throw new ArgumentOutOfRangeException(nameof(num));
     }
 }
