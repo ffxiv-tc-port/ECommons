@@ -1,4 +1,4 @@
-using ECommons.DalamudServices;
+﻿using ECommons.DalamudServices;
 using ECommons.ExcelServices;
 using Lumina.Data;
 using Lumina.Excel.Sheets;
@@ -350,6 +350,17 @@ public static class Content
                 TerritoryIntendedUseEnum.Large_Scale_Savage_Raid =>
                 GameHelpers.ContentType.FieldRaid,
 
+            // 台服(TC)注意:這三個英文字面在台服比對不到(ContentName 是以 client 語言
+            // 讀出的 CFC/PlaceName),但**不需要補繁中**——7.20 EXD dump 實查後三個都是死碼:
+            //  * Delubrum Reginae 是 TerritoryType 936/937,TerritoryIntendedUse 52/53,
+            //    已被上面的 Large_Scale_Raid / Large_Scale_Savage_Raid 分支攔下,
+            //    這一行永遠輪不到(全表只有 936/937 用 52/53)。
+            //  * Castrum Lacus Litore(帝國湖岸堡攻城戰)與 The Dalriada(旗艦達爾里阿達號
+            //    攻略戰)沒有自己的 TerritoryType/CFC,它們是南方博茲雅戰線(920)與
+            //    扎杜諾爾高原(975)裡的 DynamicEvent(16 / 32),所以 ContentName 在裡面
+            //    仍然是所屬野外區域的名字——這兩個比對在**任何語言**都恆為 false。
+            // 真正還活著的只有 MapID 520~527(優雷卡豐水之地的兵武塔＝Baldesion Arsenal),
+            // 而那是數值判定,與語言無關。保留原樣以免影響其他語言客戶端。
             _ when
                 (ContentName?.Contains("Delubrum") ?? false) ||
                 (ContentName?.Contains("Lacus") ?? false) ||
@@ -415,6 +426,11 @@ public static class Content
             { ContentType.RowId: 29 } when ContentDifficultyFromName == "Savage" =>
                 GameHelpers.ContentDifficulty.FieldRaidsSavage,
 
+            // 台服(TC)注意:Contains("Minstrel") 在台服比對不到,但**不需要補繁中**——
+            // 台服的吟遊詩人敘事詩系列不是統一前綴,而是分散在「極 」前綴(極 神龍/極 月讀/
+            // 極 黑迪斯/極 佐狄亞克/極 海德林/極 尼德霍格/極 永恆女王…)與
+            // 「究極幻想」「蒼天幻想」「終極之戰」三個特例,這些全部已由
+            // ContentDifficultyFromNameTC 判成 "Extreme",左邊的條件就會成立。
             { ContentType.RowId: 4 } when
                 ContentDifficultyFromName == "Extreme" ||
                 (ContentName?.Contains("Minstrel") ?? false) =>
