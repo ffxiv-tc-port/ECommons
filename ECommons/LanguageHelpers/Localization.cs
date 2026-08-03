@@ -80,12 +80,22 @@ public static class Localization
         return AvailableLanguages;
     }
 
+    // 這裡刻意用數字轉型而不是列舉成員名稱：上游 Dalamud 的 ClientLanguage 只有 0..3，
+    // 4 以上是各分支自己加的，寫成員名稱在對上游建置時會編不過。
+    // 我們這一支（TC fork）的 ClientLanguage 是：
+    //   0 Japanese / 1 English / 2 German / 3 French
+    //   4 ChineseSimplified / 5 ChineseTraditional / 6 Korean / 7 TraditionalChinese
+    // 🔴 台服（TC）實機回報的是 7，不是 4。原本只對應 4 的時候，台服會靜默落到 "English"，
+    //    連帶讓 Language*.ini 的查找也找錯檔名。4 保留不動（別的分支還在用）。
     public static string GameLanguageString => Svc.Data.Language switch
     {
         ClientLanguage.Japanese => "Japanese",
         ClientLanguage.French => "French",
         ClientLanguage.German => "German",
         (ClientLanguage)4 => "Chinese",
+        (ClientLanguage)5 => "ChineseTraditional",
+        (ClientLanguage)6 => "Korean",
+        (ClientLanguage)7 => "ChineseTraditional",
         _ => "English"
     };
 
