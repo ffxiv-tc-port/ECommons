@@ -16,9 +16,14 @@ public static unsafe partial class GenericHelpers
     public static bool IsReady(this AtkUnitBase Addon)
         => Addon.IsVisible && Addon.UldManager.LoadedState == AtkLoadState.Loaded && Addon.IsFullyLoaded();
 
+    /// <remarks>
+    /// <c>AtkComponentNode.Component</c> 是指標欄位,元件尚未 setup 完成或已開始拆解時是 null,
+    /// 無防護地讀 <c>Component-&gt;UldManager</c> 會觸發 AccessViolationException(無法被 try/catch 攔截)。
+    /// </remarks>
+    /// <returns>路徑上任一指標為 null 時回 <see langword="false"/>(視為尚未就緒)。</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsAddonReady(AtkComponentNode* Addon)
-        => Addon->AtkResNode.IsVisible() && Addon->Component->UldManager.LoadedState == AtkLoadState.Loaded;
+        => Addon != null && Addon->AtkResNode.IsVisible() && Addon->Component != null && Addon->Component->UldManager.LoadedState == AtkLoadState.Loaded;
 
     /// <summary>
     /// Null-safe replacement for reading <c>IsEnabled</c> on a button-derived component.
@@ -88,10 +93,24 @@ public static unsafe partial class GenericHelpers
 
             if((int)node->Type >= 1000)
             {
+                // GetAsAtkComponentNode 是原生 MemberFunction,型別不符時回 null。
                 var componentNode = node->GetAsAtkComponentNode();
+                if(componentNode == null)
+                    return null;
+
+                // 元件尚未 setup 完成、或已經開始拆解時 Component 是 null;
+                // 這裡是走訪鏈的中途,呼叫端擋得掉 addon 為 null,擋不掉這個。
                 var component = componentNode->Component;
-                var uldManager = component->UldManager;
-                childNode = uldManager.NodeList[0];
+                if(component == null)
+                    return null;
+
+                // NodeList 在 UldManager 配置節點清單之前是 null、NodeListCount 是 0,
+                // 直接取 NodeList[0] 等同解空指標/讀出界。
+                var nodeList = component->UldManager.NodeList;
+                if(nodeList == null || component->UldManager.NodeListCount == 0)
+                    return null;
+
+                childNode = nodeList[0];
                 return childNode == null ? null : GetNodeByIDChain(childNode, [.. newList]);
             }
 
