@@ -58,10 +58,13 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
     public bool IsAddonFocused => IsAddonInFocusList;
     public bool IsAddonOnlyFocusListEntry => RaptureAtkUnitManager.Instance()->FocusedUnitsList.Count == 1 && RaptureAtkUnitManager.Instance()->FocusedUnitsList.Entries[0].Value == Base;
 
+    // IsEnabled dereferences OwnerNode and IsVisible() dereferences AtkResNode, neither of which is null-checked
+    // by FFXIVClientStructs. Both are routed through GenericHelpers so that a missing node is reported as
+    // "not clickable" instead of raising an uncatchable AccessViolationException.
     protected bool ClickButtonIfEnabled(AtkComponentButton* button)
     {
         if(button == null) return false;
-        if(button->IsEnabled && button->AtkResNode->IsVisible())
+        if(GenericHelpers.IsComponentEnabled(button) && GenericHelpers.IsComponentVisible(&button->AtkComponentBase))
         {
             button->ClickAddonButton(Base);
             return true;
@@ -71,7 +74,8 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
 
     protected bool ClickButtonIfEnabled(AtkComponentRadioButton* button)
     {
-        if(button->IsEnabled && button->AtkResNode->IsVisible())
+        if(button == null) return false;
+        if(GenericHelpers.IsComponentEnabled(button) && GenericHelpers.IsComponentVisible(&button->AtkComponentButton.AtkComponentBase))
         {
             button->ClickRadioButton(Base);
             return true;
@@ -81,7 +85,8 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
 
     protected bool ClickCheckboxIfEnabled(AtkComponentCheckBox* checkbox)
     {
-        if(checkbox->IsEnabled && checkbox->AtkResNode->IsVisible())
+        if(checkbox == null) return false;
+        if(GenericHelpers.IsComponentEnabled(checkbox) && GenericHelpers.IsComponentVisible(&checkbox->AtkComponentButton.AtkComponentBase))
         {
             checkbox->ClickCheckBox(Base);
             checkbox->SetChecked(true);

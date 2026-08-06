@@ -28,13 +28,18 @@ public partial class AddonMaster
 
         public void Yes()
         {
-            if(Addon->YesButton != null && !Addon->YesButton->IsEnabled)
+            var yesButton = Addon->YesButton;
+            // Both IsEnabled and the NodeFlags write below resolve through OwnerNode, which FFXIVClientStructs
+            // does not null-check. GenericHelpers.IsComponentEnabled deliberately is NOT used for this test: it
+            // reports "not enabled" for a null OwnerNode, which would send us into the force-enable branch and
+            // dereference that very null pointer.
+            if(yesButton != null && yesButton->OwnerNode != null && !yesButton->IsEnabled)
             {
                 Svc.Log.Debug($"{nameof(AddonSelectYesno)}: Force enabling yes button");
-                var flagsPtr = (ushort*)&Addon->YesButton->AtkComponentBase.OwnerNode->AtkResNode.NodeFlags;
+                var flagsPtr = (ushort*)&yesButton->AtkComponentBase.OwnerNode->AtkResNode.NodeFlags;
                 *flagsPtr ^= 1 << 5;
             }
-            ClickButtonIfEnabled(Addon->YesButton);
+            ClickButtonIfEnabled(yesButton);
         }
 
         /// <summary>

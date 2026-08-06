@@ -22,7 +22,7 @@ public partial class AddonMaster
 
         public AtkComponentButton* DeliverButton => Base->GetComponentButtonById(38);
 
-        public bool IsEnabled => DeliverButton->IsEnabled;
+        public bool IsEnabled => GenericHelpers.IsComponentEnabled(DeliverButton);
 
         public override string AddonDescription { get; } = "Grand Company delivery window";
 

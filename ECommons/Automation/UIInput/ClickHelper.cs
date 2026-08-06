@@ -108,39 +108,59 @@ public unsafe class ClickHelper
     }
 }
 
+// Every method below dereferences native pointers that the game leaves null while a component is being set up
+// or torn down: the component's OwnerNode, the addon it belongs to, and the AtkEvent taken from its event
+// manager. An AccessViolationException raised here is a corrupted-state exception that no try/catch can
+// recover from, so each pointer is checked and a missing one makes the click a no-op instead of a crash.
 public static unsafe class ClickHelperExtensions
 {
     public static void ClickAddonButton(this AtkComponentButton target, AtkComponentBase* addon, uint which, EventType type = EventType.CHANGE, EventData? eventData = null)
-        => ClickHelper.ClickAddonComponent(addon, target.AtkComponentBase.OwnerNode, which, type, eventData);
+    {
+        var ownerNode = target.AtkComponentBase.OwnerNode;
+        if(addon == null || ownerNode == null) return;
+        ClickHelper.ClickAddonComponent(addon, ownerNode, which, type, eventData);
+    }
 
     public static void ClickRadioButton(this AtkComponentRadioButton target, AtkComponentBase* addon, uint which, EventType type = EventType.CHANGE)
-        => ClickHelper.ClickAddonComponent(addon, target.OwnerNode, which, type);
+    {
+        var ownerNode = target.OwnerNode;
+        if(addon == null || ownerNode == null) return;
+        ClickHelper.ClickAddonComponent(addon, ownerNode, which, type);
+    }
 
     public static void ClickAddonButton(this AtkComponentButton target, AtkUnitBase* addon, AtkEvent* eventData)
     {
+        if(addon == null || eventData == null) return;
         ClickHelper.Listener.Invoke((nint)addon, eventData->State.EventType, eventData->Param, eventData);
     }
 
     public static void ClickAddonButton(this AtkCollisionNode target, AtkUnitBase* addon, AtkEvent* eventData)
     {
+        if(addon == null || eventData == null) return;
         ClickHelper.Listener.Invoke((nint)addon, eventData->State.EventType, eventData->Param, eventData);
     }
 
     public static void ClickAddonButton(this AtkComponentButton target, AtkUnitBase* addon)
     {
-        var btnRes = target.AtkComponentBase.OwnerNode->AtkResNode;
+        var ownerNode = target.AtkComponentBase.OwnerNode;
+        if(addon == null || ownerNode == null) return;
+        var btnRes = ownerNode->AtkResNode;
         var evt = (AtkEvent*)btnRes.AtkEventManager.Event;
+        if(evt == null) return;
 
         addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, btnRes.AtkEventManager.Event);
     }
 
     public static void ClickAddonButton(this AtkCollisionNode target, AtkUnitBase* addon)
     {
+        if(addon == null) return;
         var btnRes = target.AtkResNode;
         var evt = (AtkEvent*)btnRes.AtkEventManager.Event;
 
-        while(evt->State.EventType != AtkEventType.MouseClick)
+        // The list is not guaranteed to contain a MouseClick event; walking past its end used to crash.
+        while(evt != null && evt->State.EventType != AtkEventType.MouseClick)
             evt = evt->NextEvent;
+        if(evt == null) return;
 
         addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, btnRes.AtkEventManager.Event);
     }
@@ -148,8 +168,11 @@ public static unsafe class ClickHelperExtensions
 
     public static void ClickRadioButton(this AtkComponentRadioButton target, AtkUnitBase* addon)
     {
-        var btnRes = target.OwnerNode->AtkResNode;
+        var ownerNode = target.OwnerNode;
+        if(addon == null || ownerNode == null) return;
+        var btnRes = ownerNode->AtkResNode;
         var evt = (AtkEvent*)btnRes.AtkEventManager.Event;
+        if(evt == null) return;
 
         Svc.Log.Debug($"{evt->State.EventType} {evt->Param}");
         addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, btnRes.AtkEventManager.Event);
@@ -158,8 +181,11 @@ public static unsafe class ClickHelperExtensions
     public static void ClickCheckBox(this AtkComponentCheckBox target, AtkUnitBase* addon)
     {
         //var btnRes = target.AtkComponentButton.AtkComponentBase.OwnerNode->AtkResNode;
-        var btnRes = target.OwnerNode->AtkResNode;
+        var ownerNode = target.OwnerNode;
+        if(addon == null || ownerNode == null) return;
+        var btnRes = ownerNode->AtkResNode;
         var evt = (AtkEvent*)btnRes.AtkEventManager.Event;
+        if(evt == null) return;
         var data = stackalloc AtkEventData[1];
         addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, evt, data); // btnRes.AtkEventManager.Event);
     }

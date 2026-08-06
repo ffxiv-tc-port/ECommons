@@ -21,7 +21,7 @@ public partial class AddonMaster
         public void HandOver() => ClickButtonIfEnabled(HandOverButton);
         public void Cancel() => ClickButtonIfEnabled(CancelButton);
 
-        public bool IsHandOverEnabled => HandOverButton->IsEnabled;
+        public bool IsHandOverEnabled => GenericHelpers.IsComponentEnabled(HandOverButton);
 
         public bool IsFilled
         {

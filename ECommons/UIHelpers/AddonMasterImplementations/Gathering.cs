@@ -63,7 +63,7 @@ public partial class AddonMaster
             }
 
             public AtkComponentCheckBox* CheckBox => checkbox;
-            public bool IsEnabled => CheckBox->IsEnabled;
+            public bool IsEnabled => GenericHelpers.IsComponentEnabled(CheckBox);
             public string ItemName => CheckBox->GetTextNodeById(23)->GetAsAtkTextNode()->NodeText.GetText();
             public uint ItemID => addon->ItemIds[index];
             public bool IsCollectable => Svc.Data.GetExcelSheet<Item>()?.GetRowOrDefault(ItemID)?.IsCollectable ?? false;

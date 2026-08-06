@@ -21,6 +21,49 @@ public static unsafe partial class GenericHelpers
         => Addon->AtkResNode.IsVisible() && Addon->Component->UldManager.LoadedState == AtkLoadState.Loaded;
 
     /// <summary>
+    /// Null-safe replacement for reading <c>IsEnabled</c> on a button-derived component.
+    /// <b>Always prefer this over dereferencing <c>IsEnabled</c> directly.</b>
+    /// </summary>
+    /// <remarks>
+    /// FFXIVClientStructs resolves <c>AtkComponentButton.IsEnabled</c> as
+    /// <c>OwnerNode-&gt;AtkResNode.NodeFlags</c> and performs no null check on <c>OwnerNode</c>.
+    /// A component that has not finished setup - or whose owner node has already been torn down - has a null
+    /// <c>OwnerNode</c>, so reading the property directly raises an AccessViolationException.
+    /// AVE is a corrupted-state exception: neither <c>try</c>/<c>catch</c> nor any exception-isolation wrapper
+    /// can recover from it, so the pointers must be validated before the property is read.
+    /// </remarks>
+    /// <returns><see langword="false"/> - treat as not clickable - when any pointer on the path is null.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentEnabled(AtkComponentButton* button)
+        => button != null && button->OwnerNode != null && button->IsEnabled;
+
+    /// <inheritdoc cref="IsComponentEnabled(AtkComponentButton*)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentEnabled(AtkComponentRadioButton* radioButton)
+        => radioButton != null && radioButton->OwnerNode != null && radioButton->IsEnabled;
+
+    /// <inheritdoc cref="IsComponentEnabled(AtkComponentButton*)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentEnabled(AtkComponentCheckBox* checkBox)
+        => checkBox != null && checkBox->OwnerNode != null && checkBox->IsEnabled;
+
+    /// <inheritdoc cref="IsComponentEnabled(AtkComponentButton*)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentEnabled(AtkComponentListItemRenderer* listItem)
+        => listItem != null && listItem->OwnerNode != null && listItem->IsEnabled;
+
+    /// <summary>
+    /// Null-safe replacement for <c>component-&gt;AtkResNode-&gt;IsVisible()</c>.
+    /// <c>AtkComponentBase.AtkResNode</c> is a pointer field and is null before the component is set up,
+    /// so dereferencing it unguarded is the same class of AccessViolationException as
+    /// <see cref="IsComponentEnabled(AtkComponentButton*)"/>.
+    /// </summary>
+    /// <returns><see langword="false"/> when the component or its res node is null.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentVisible(AtkComponentBase* component)
+        => component != null && component->AtkResNode != null && component->AtkResNode->IsVisible();
+
+    /// <summary>
     /// Gets a node given a chain of node IDs
     /// </summary>
     /// <param name="node">Root node of the addon</param>
