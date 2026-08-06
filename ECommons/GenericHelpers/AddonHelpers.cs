@@ -9,10 +9,21 @@ using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
 namespace ECommons;
 public static unsafe partial class GenericHelpers
 {
+    /// <remarks>
+    /// 原本無條件解 <paramref name="Addon"/>,傳入 null 直接 AccessViolationException
+    /// (corrupted-state exception,try/catch 攔不到)。
+    /// </remarks>
+    /// <returns><see langword="false"/> 當 <paramref name="Addon"/> 為 null ——「不存在」就是「沒 ready」。</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsAddonReady(AtkUnitBase* Addon)
-        => Addon->IsVisible && Addon->UldManager.LoadedState == AtkLoadState.Loaded && Addon->IsFullyLoaded();
+        => Addon != null && Addon->IsVisible && Addon->UldManager.LoadedState == AtkLoadState.Loaded && Addon->IsFullyLoaded();
 
+    /// <remarks>
+    /// ⚠️ 這個多載<b>擋不了 null</b>,也無法擋:<see cref="AtkUnitBase"/> 是 struct,參數是<b>傳值</b>的,
+    /// 複製動作發生在呼叫端(<c>ptr-&gt;IsReady()</c> 等同 <c>(*ptr).IsReady()</c>)。
+    /// 指標為 null 時 AccessViolation 在<b>進入本函式之前</b>就已經發生,這裡再怎麼判空都來不及。
+    /// 🔑 手上是指標就改用 <see cref="IsAddonReady(AtkUnitBase*)"/>,它有判空。
+    /// </remarks>
     public static bool IsReady(this AtkUnitBase Addon)
         => Addon.IsVisible && Addon.UldManager.LoadedState == AtkLoadState.Loaded && Addon.IsFullyLoaded();
 
@@ -126,9 +137,21 @@ public static unsafe partial class GenericHelpers
     /// Recursively gets the root node of an addon
     /// </summary>
     /// <param name="node">Starting node to search from</param>
-    /// <returns></returns>
+    /// <returns>
+    /// 最上層的節點。<paramref name="node"/> 為 <see langword="null"/> 時回 <see langword="null"/> ——
+    /// ⚠️ 這是本函式<b>唯一</b>會回 null 的情況;傳入非 null 時必定回非 null(最少回傳自己)。
+    /// </returns>
+    /// <remarks>
+    /// 🔴 原本無條件解 <c>node-&gt;ParentNode</c>,傳入 null 直接 AccessViolationException
+    /// (corrupted-state exception,try/catch 與任何例外隔離包裝都攔不到)。
+    /// 📌 呼叫端若把回傳值直接拿去解參考,崩潰位置會從本函式內移到呼叫端 —— 崩潰行為等價,
+    /// 但呼叫端至少<b>有機會</b>判空。
+    /// </remarks>
     public static unsafe AtkResNode* GetRootNode(AtkResNode* node)
     {
+        if(node == null)
+            return null;
+
         var parent = node->ParentNode;
         return parent == null ? node : GetRootNode(parent);
     }
