@@ -99,34 +99,49 @@ public partial class AddonMaster
         }
 
         /// <summary>
-        /// 高難任務完成計數。讀不到時回 null。
+        /// 高難任務完成計數(面板上「n/m」的左半)。讀不到或解析不出可信數字時回 <see langword="null"/>。
         /// 2026-08-02 實機崩潰的元兇:高難任務下這個索引的 AtkValue 型別不符,
         /// 原寫法無檢查直接解參考 → AccessViolation(try/catch 攔不到)。
         /// </summary>
+        /// <remarks>
+        /// 🔴 解析用 <see cref="ParseCounter"/>,<b>不再</b>用 <c>Regex.Replace(s, @"[^\d]", "")</c>。
+        /// 那個寫法會把字串裡所有數字<b>連在一起</b>,「剩餘時間 25:10以上」變成 <b>2510</b> ——
+        /// 一個看起來完全合理、卻根本不是計數的數字,消費端拿去比大小會靜默判錯。
+        /// <br/><br/>
+        /// 📌 <b>相容性(這是刻意保留的)</b>:<see cref="ParseCounter"/> 仍然容許前後綴文字
+        /// (例如「進度 1」),所以原本要靠 regex fallback 才擠得出數字的<b>單一數字群</b>字串
+        /// 照樣讀得到。只有「字串裡有兩組以上分開的數字」時行為才改變 —— 從假數字改成 null。
+        /// 拿不準時請一併看 <see cref="CriticalScoreRaw"/> 的原字串。
+        /// </remarks>
         public uint? CriticalScore
+        {
+            get
+            {
+                var rawValue = CriticalScoreRaw;
+                if(rawValue == null)
+                    return null;
+
+                // Extract the left side of the slash
+                return ParseCounter(rawValue.Split('/')[0]);
+            }
+        }
+
+        /// <summary>
+        /// <see cref="CriticalScore"/> 讀到的面板原字串,未經任何解析。
+        /// 讀不到(AtkValues 未載入、型別不是字串、指標為空)時回 <see langword="null"/>。
+        /// </summary>
+        /// <remarks>
+        /// 📌 存在的理由是<b>診斷</b>:<see cref="CriticalScore"/> 回 null 時,消費端光看 null
+        /// 分不出「面板還沒載入」與「載入了但格式跟預期不一樣」。把原字串印出來才問得出後者。
+        /// </remarks>
+        public string? CriticalScoreRaw
         {
             get
             {
                 if(Addon->AtkValuesCount < 6 || !Addon->AtkValues[5].IsString() || Addon->AtkValues[5].String.Value == null)
                     return null;
 
-                var rawValue = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[5].String.Value)?.GetText();
-                if(rawValue == null)
-                    return null;
-
-                // Extract the left side of the slash
-                var leftSide = rawValue.Split('/')[0].Trim();
-
-                // Number conversion test #1.
-                if(uint.TryParse(leftSide, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var result))
-                    return result;
-
-                // Fallback: if the first test fails
-                var cleanedValue = System.Text.RegularExpressions.Regex.Replace(leftSide, @"[^\d]", "");
-                if(uint.TryParse(cleanedValue, out result))
-                    return result;
-
-                return null; // 解析失敗:回 null 而不是假的 0
+                return MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[5].String.Value)?.GetText();
             }
         }
 
@@ -169,6 +184,65 @@ public partial class AddonMaster
 
             if(digits.Length == 0)
                 return null;
+
+            return uint.TryParse(digits.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var result)
+                ? result
+                : null; // 溢位
+        }
+
+        /// <summary>
+        /// 把「計數」型的面板字串解析成數值。規則:整個字串裡<b>有且只有一組</b>連續數字時才採用它,
+        /// 零組或兩組以上一律回 <see langword="null"/>。組內的千分位逗號會被略過。
+        /// </summary>
+        /// <remarks>
+        /// 🔴 這條規則要解掉的是 <c>Regex.Replace(s, @"[^\d]", "")</c> 的<b>跨分隔符黏合</b>:
+        /// 「25:10」被黏成 2510、「1／1」(全形斜線,台服字串很可能長這樣)被黏成 11。
+        /// 黏出來的值不會拋例外、不會進 log,只會讓消費端靜默做出錯誤判斷。
+        /// <br/><br/>
+        /// 它比 <see cref="ParseScore"/> <b>寬鬆</b>(容許前後綴文字,「進度 1」讀得到 1),
+        /// 比 regex 版<b>嚴格</b>(拒絕多組數字)。兩者刻意不共用:
+        /// <list type="bullet">
+        /// <item><see cref="ParseScore"/> 服務的是 <see cref="SilverScore"/>/<see cref="GoldScore"/>,
+        /// 消費端拿去<b>比大小</b>,任何雜訊都可能造成提前交件 → 取最嚴。</item>
+        /// <item>本函式服務的是 <see cref="CriticalScore"/>,消費端比的是<b>等於特定值</b>,
+        /// 且既有行為已經容許前綴 —— 收得跟 ParseScore 一樣嚴會回退既有功能。</item>
+        /// </list>
+        /// </remarks>
+        /// <param name="raw">面板原字串(可含前後綴文字)。</param>
+        /// <returns>恰好一組連續數字時回該組數值;否則(含溢位)回 null。</returns>
+        private static uint? ParseCounter(string? raw)
+        {
+            if(raw == null)
+                return null;
+
+            var digits = new StringBuilder(raw.Length);
+            var groups = 0;
+            var inGroup = false;
+
+            foreach(var c in raw)
+            {
+                if(char.IsAsciiDigit(c))
+                {
+                    if(!inGroup)
+                    {
+                        groups++;
+                        inGroup = true;
+                    }
+                    // 第二組以後不必再收,但要繼續掃完才知道總共幾組。
+                    if(groups == 1)
+                        digits.Append(c);
+                    continue;
+                }
+
+                // 逗號夾在數字中間視為千分位,不切斷同一組;其餘字元(冒號、全形斜線、中文…)都切斷。
+                if(c == ',' && inGroup)
+                    continue;
+
+                inGroup = false;
+            }
+
+            if(groups != 1)
+                return null; // 0 組=沒有數字;≥2 組=分不出哪一組才是計數,不猜。
 
             return uint.TryParse(digits.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var result)
                 ? result

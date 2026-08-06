@@ -17,8 +17,16 @@ public partial class AddonMaster
         public AtkComponentButton* EndDesynthesisButton => Addon->GetComponentButtonById(28);
         public SeString EndDesynthesisButtonSeString => GenericHelpers.ReadSeString(&EndDesynthesisButton->UldManager.SearchNodeById(2)->GetAsAtkTextNode()->NodeText);
         public string EndDesynthesisButtonText => EndDesynthesisButtonSeString.GetText();
-        public bool DesynthesisActive => Svc.Data.GetExcelSheet<Addon>()!.GetRow(5867)!.Text.ToString().Equals(EndDesynthesisButtonText);
-        public bool DesynthesisInactive => Svc.Data.GetExcelSheet<Addon>()!.GetRow(5868)!.Text.ToString().Equals(EndDesynthesisButtonText);
+        /// <remarks>
+        /// 🔴 <c>GetRow</c> 對不存在的列<b>擲例外</b>不回 null,所以原本那個 <c>!</c> 是無效的防護。
+        /// 這裡的 5867/5868 是寫死的 Addon 列號,而寫死的資料表列號在台服一律要當成「可能不存在」
+        /// (2026-08-06 離線驗過台服 7.20 的 Addon 表有這兩列,但那是<b>當下</b>的事實不是保證)。
+        /// 讀不到時回 <see langword="false"/> —— 失敗形式是「按鈕文字比對不成立 → 不動作」,
+        /// 不是把例外丟進呼叫端的每幀迴圈。
+        /// </remarks>
+        public bool DesynthesisActive => Svc.Data.GetExcelSheet<Addon>().GetRowOrDefault(5867)?.Text.ToString().Equals(EndDesynthesisButtonText) == true;
+        /// <inheritdoc cref="DesynthesisActive"/>
+        public bool DesynthesisInactive => Svc.Data.GetExcelSheet<Addon>().GetRowOrDefault(5868)?.Text.ToString().Equals(EndDesynthesisButtonText) == true;
 
         public override string AddonDescription { get; } = "Desynthesis Bulk Dialog";
 

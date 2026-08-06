@@ -78,7 +78,16 @@ public static unsafe class Player
     public static bool IsJumping => Available && (Svc.Condition[ConditionFlag.Jumping] || Svc.Condition[ConditionFlag.Jumping61] || Character->IsJumping());
     public static bool Mounted => Svc.Condition[ConditionFlag.Mounted];
     public static bool Mounting => Svc.Condition[ConditionFlag.MountOrOrnamentTransition];
-    public static bool CanMount => Svc.Data.GetExcelSheet<TerritoryType>().GetRow(Territory).Mount && PlayerState.Instance()->NumOwnedMounts > 0;
+    /// <summary>
+    /// 目前區域是否允許騎乘,且玩家至少擁有一隻坐騎。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <c>GetRow</c> 對不存在的列<b>擲例外</b>不回 null。<see cref="Territory"/> 在讀取畫面/尚未進場時
+    /// 可能是 0 或一個本地 sheet 沒有的區域,原寫法會讓這個看似無害的布林屬性擲例外
+    /// —— 而本類別的契約(見類別註解)是「盡量不要擲例外」。
+    /// 讀不到區域資料時回 <see langword="false"/>(＝保守,不會誤導呼叫端去召喚坐騎)。
+    /// </remarks>
+    public static bool CanMount => Svc.Data.GetExcelSheet<TerritoryType>().GetRowOrDefault(Territory)?.Mount == true && PlayerState.Instance()->NumOwnedMounts > 0;
     public static bool CanFly => Control.CanFly;
 
     public static float AnimationLock => *(float*)((nint)ActionManager.Instance() + 8);
