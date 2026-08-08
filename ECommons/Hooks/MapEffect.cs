@@ -109,7 +109,7 @@ public static unsafe class MapEffect
         {
             e.Log();
         }
-        return ProcessMapEffectHook.Original(a1, a2, a3, a4);
+        return ProcessMapEffectHook.OriginalDisposeSafe(a1, a2, a3, a4);
     }
 
     public static void Init(Action<long, uint, ushort, ushort> fullParamsCallback)

@@ -75,7 +75,7 @@ public unsafe class AutoCutsceneSkipper
     {
         if(!Svc.Condition[ConditionFlag.OccupiedInCutSceneEvent])
         {
-            return CutsceneHandleInputHook.Original(a1, a2);
+            return CutsceneHandleInputHook.OriginalDisposeSafe(a1, a2);
         }
         var called = false;
         byte ret = 0;
@@ -95,7 +95,7 @@ public unsafe class AutoCutsceneSkipper
                         // 在 try 之外,再擲一次就直接穿出 detour 進原生層。
                         // 語意上 called 要表達的是「Original 已經被呼叫過(不管結果如何)」。
                         called = true;
-                        ret = CutsceneHandleInputHook.Original(a1, a2);
+                        ret = CutsceneHandleInputHook.OriginalDisposeSafe(a1, a2);
                     }
                     finally
                     {
@@ -111,7 +111,7 @@ public unsafe class AutoCutsceneSkipper
         }
         if(!called)
         {
-            ret = CutsceneHandleInputHook.Original(a1, a2);
+            ret = CutsceneHandleInputHook.OriginalDisposeSafe(a1, a2);
         }
         return ret;
     }

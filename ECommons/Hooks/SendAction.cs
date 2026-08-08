@@ -25,7 +25,7 @@ public static class SendAction
         {
             e.Log();
         }
-        return SendActionHook.Original(targetObjectId, actionType, actionId, sequence, a5, a6, a7, a8, a9);
+        return SendActionHook.OriginalDisposeSafe(targetObjectId, actionType, actionId, sequence, a5, a6, a7, a8, a9);
     }
 
     public static void Init(SendActionCallbackDelegate fullParamsCallback)

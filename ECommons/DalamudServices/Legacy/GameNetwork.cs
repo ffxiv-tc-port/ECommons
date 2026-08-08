@@ -91,7 +91,7 @@ internal sealed unsafe class GameNetwork : IGameNetwork
             }
         }
 
-        this.processZonePacketDownHook.Original(dispatcher, targetId, dataPtr + 0x10);
+        this.processZonePacketDownHook.OriginalDisposeSafe(dispatcher, targetId, dataPtr + 0x10);
         this.hitchDetectorDown.Stop();
     }
 
@@ -124,6 +124,6 @@ internal sealed unsafe class GameNetwork : IGameNetwork
 
         this.hitchDetectorUp.Stop();
 
-        return this.processZonePacketUpHook.Original(a1, dataPtr, a3, a4);
+        return this.processZonePacketUpHook.OriginalDisposeSafe(a1, dataPtr, a3, a4);
     }
 }

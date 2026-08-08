@@ -125,6 +125,6 @@ public static unsafe class ActionEffect
             PluginLog.Error($"An error has occurred in Action Effect hook.\n{e}");
         }
 
-        ProcessActionEffectHook.Original(sourceID, sourceCharacter, pos, effectHeader, effectArray, effectTail);
+        ProcessActionEffectHook.OriginalDisposeSafe(sourceID, sourceCharacter, pos, effectHeader, effectArray, effectTail);
     }
 }

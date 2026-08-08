@@ -63,7 +63,7 @@ public static unsafe class Callback
 
     private static byte AtkUnitBase_FireCallbackDetour(AtkUnitBase* Base, int valueCount, AtkValue* values, byte updateState)
     {
-        var ret = AtkUnitBase_FireCallbackHook?.Original(Base, valueCount, values, updateState);
+        var ret = AtkUnitBase_FireCallbackHook?.OriginalDisposeSafe(Base, valueCount, values, updateState);
         try
         {
             PluginLog.Debug($"Callback on {Base->Name.Read()}, valueCount={valueCount}, updateState={updateState}\n{DecodeValues(valueCount, values).Select(x => $"    {x}").Join("\n")}");

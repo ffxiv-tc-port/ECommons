@@ -42,7 +42,7 @@ public static class DirectorUpdate
         {
             e.Log();
         }
-        return ProcessDirectorUpdateHook.Original(a1, a2, a3, a4, a5, a6, a7);
+        return ProcessDirectorUpdateHook.OriginalDisposeSafe(a1, a2, a3, a4, a5, a6, a7);
     }
 
     internal static long ProcessDirectorUpdateDetour_Category(long a1, long a2, DirectorUpdateCategory a3, uint a4, uint a5, int a6, int a7)
@@ -55,7 +55,7 @@ public static class DirectorUpdate
         {
             e.Log();
         }
-        return ProcessDirectorUpdateHook.Original(a1, a2, a3, a4, a5, a6, a7);
+        return ProcessDirectorUpdateHook.OriginalDisposeSafe(a1, a2, a3, a4, a5, a6, a7);
     }
 
     public static void Init(Action<long, long, DirectorUpdateCategory, uint, uint, int, int> fullParamsCallback)

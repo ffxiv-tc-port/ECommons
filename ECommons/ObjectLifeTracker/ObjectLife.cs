@@ -51,7 +51,7 @@ public static class ObjectLife
             throw new Exception("IGameObjectLifeTime is null. Have you initialised the ObjectLife module on ECommons initialisation?");
         }
         IGameObjectLifeTime[ptr] = Environment.TickCount64;
-        var ret = IGameObject_ctor_hook.Original(ptr);
+        var ret = IGameObject_ctor_hook.OriginalDisposeSafe(ptr);
 
         if(OnObjectCreation != null)
         {
