@@ -1,5 +1,6 @@
 ﻿using Dalamud.Hooking;
 using ECommons.DalamudServices;
+using ECommons.EzHookManager;
 using ECommons.Logging;
 using System;
 
@@ -13,10 +14,20 @@ public static class SendAction
     public delegate long SendActionDelegate(long targetObjectId, byte actionType, uint actionId, ushort sequence, long a5, long a6, long a7, long a8, long a9);
     public delegate void SendActionCallbackDelegate(long targetObjectId, byte actionType, uint actionId, ushort sequence, long a5, long a6, long a7, long a8, long a9);
     internal static Hook<SendActionDelegate> SendActionHook = null;
+    /// <summary>
+    /// Delegate pointing at the original function address (no trampoline involved).
+    /// <see cref="Dispose"/> sets the hook field back to null; by that point Disable() and Dispose()
+    /// have already run and the original bytes are restored, so calling this delegate can not
+    /// recurse back into the detour.
+    /// </summary>
+    private static SendActionDelegate OriginalDelegate = null;
     private static SendActionCallbackDelegate Callback = null;
 
     internal static long SendActionDetour(long targetObjectId, byte actionType, uint actionId, ushort sequence, long a5, long a6, long a7, long a8, long a9)
     {
+        // Dispose() sets SendActionHook back to null while this detour may still be executing.
+        // Snapshot it once and only use the local afterwards.
+        var hook = SendActionHook;
         try
         {
             Callback(targetObjectId, actionType, actionId, sequence, a5, a6, a7, a8, a9);
@@ -25,7 +36,13 @@ public static class SendAction
         {
             e.Log();
         }
-        return SendActionHook.OriginalDisposeSafe(targetObjectId, actionType, actionId, sequence, a5, a6, a7, a8, a9);
+        var original = hook?.OriginalDisposeSafe ?? OriginalDelegate;
+        if(original == null)
+        {
+            PluginLog.Information($"SendAction hook was disposed mid-call and no original delegate is available; skipping the original call for this invocation.");
+            return 0;
+        }
+        return original(targetObjectId, actionType, actionId, sequence, a5, a6, a7, a8, a9);
     }
 
     public static void Init(SendActionCallbackDelegate fullParamsCallback)
@@ -37,6 +54,7 @@ public static class SendAction
         if(Svc.SigScanner.TryScanText(Sig, out var ptr))
         {
             Callback = fullParamsCallback;
+            OriginalDelegate ??= EzDelegate.Get<SendActionDelegate>(ptr);
             SendActionHook = Svc.Hook.HookFromAddress<SendActionDelegate>(ptr, SendActionDetour);
             Enable();
             PluginLog.Information($"Requested SendAction hook and successfully initialized");
