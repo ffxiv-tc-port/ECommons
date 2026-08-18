@@ -15,6 +15,37 @@ public class InternalLog
 {
     public static readonly CircularBuffer<InternalLogMessage> Messages = new(1000);
 
+    /// <summary>
+    /// Overrides the write side gate used by <see cref="PluginLog"/> when it records into
+    /// <see cref="Messages"/>. <c>null</c>, the default, follows Dalamud's own log level: whatever
+    /// Dalamud is currently not writing to its log file is not recorded here either. That automatic
+    /// value is clamped to <see cref="LogEventLevel.Information"/>, so Information and above stay
+    /// recorded no matter how high the Dalamud log level is raised.
+    /// Set this to <see cref="LogEventLevel.Verbose"/> to record everything again, which is what this
+    /// buffer did unconditionally before the gate existed.
+    /// The static methods on this class write to the buffer directly and are deliberately not gated:
+    /// they have no Dalamud log counterpart, so this buffer is their only destination.
+    /// </summary>
+    public static LogEventLevel? CaptureLevelOverride = null;
+
+    /// <summary>
+    /// Level a message must reach before <see cref="PluginLog"/> records it into <see cref="Messages"/>.
+    /// </summary>
+    public static LogEventLevel CaptureLevel
+    {
+        get
+        {
+            if(CaptureLevelOverride != null) return CaptureLevelOverride.Value;
+            var level = global::Dalamud.EntryPoint.LogLevelSwitch.MinimumLevel;
+            return level > LogEventLevel.Information ? LogEventLevel.Information : level;
+        }
+    }
+
+    /// <summary>
+    /// Whether a message of this level is currently being recorded into <see cref="Messages"/>.
+    /// </summary>
+    public static bool IsCaptureEnabled(LogEventLevel level) => level >= CaptureLevel;
+
     public static (string, Action, Vector4, bool) ImGuiTab(bool draw = true) => (draw ? "Log" : null, PrintImgui, ImGuiColors.DalamudGrey3, false);
 
     public static void Information(string s)
@@ -107,7 +138,7 @@ public class InternalLog
         ImGui.InputTextWithHint("##Filter", "Filter...", ref Search, 100);
         ImGui.SameLine();
         if(ImGuiEx.IconButton(Dalamud.Interface.FontAwesomeIcon.Filter, "##LogFilter")) ImGui.OpenPopup("filter_window");
-        ImGuiEx.Tooltip("Log Filter");
+        ImGuiEx.Tooltip($"Log Filter (recording {CaptureLevel} and above)");
 
         if(ImGui.BeginPopup("filter_window", ImGuiWindowFlags.NoMove | ImGuiWindowFlags.Popup))
         {
@@ -153,6 +184,11 @@ public class InternalLog
         FlagCheckbox("Warning", FilterType.Warning);
         FlagCheckbox("Error", FilterType.Error);
         FlagCheckbox("Fatal", FilterType.Fatal);
+        ImGui.Separator();
+        var captureAll = CaptureLevelOverride == LogEventLevel.Verbose;
+        if(ImGui.Checkbox("Record everything", ref captureAll)) CaptureLevelOverride = captureAll ? LogEventLevel.Verbose : null;
+        ImGuiEx.Tooltip("Messages below the level shown underneath are never written into the log buffer, so no filter can bring them back. Tick this to record every level again.");
+        ImGuiEx.Text(ImGuiColors.DalamudGrey, $"Recording {CaptureLevel} and above");
     }
 
     private static bool ShouldDisplayLog(LogEventLevel level)
