@@ -119,7 +119,25 @@ public static unsafe class Player
         }
     }
     public static bool IsInDuty => GameMain.Instance()->CurrentContentFinderConditionId != 0;
-    public static bool IsOnIsland => MJIManager.Instance()->IsPlayerInSanctuary;
+    /// <remarks>
+    /// 🔴 <c>MJIManager.Instance()</c> 真的可能回 <see langword="null"/>:它宣告成
+    /// <c>[StaticAddress(..., isPointer: true)]</c>,而產生器對這種取得器產出的是
+    /// 「靜態位址本身是 null 就擲例外,否則回<b>那個位址裡存放的指標值</b>」——
+    /// 擲例外那關擋的是<b>特徵碼失配</b>,回傳值本身完全沒有判空。
+    /// 玩家沒進過無人島時遊戲還沒配置這個管理器,那個指標欄位就是 null(常態,不是異常)。
+    /// <c>IsPlayerInSanctuary</c> 位在偏移 0x06,對 null 裸解參考是 AccessViolation,
+    /// 而 AVE 是 corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。
+    /// 取不到管理器時回 <see langword="false"/>(＝不在島上,保守)。
+    /// </remarks>
+    public static bool IsOnIsland
+    {
+        get
+        {
+            var mji = MJIManager.Instance();
+            if(mji == null) return false;
+            return mji->IsPlayerInSanctuary;
+        }
+    }
     public static bool IsInPvP => GameMain.IsInPvPInstance();
 
     public static Job Job => GetJob(Svc.ClientState.LocalPlayer);
@@ -133,7 +151,25 @@ public static unsafe class Player
 
     public static Vector3 Position => Available ? Object.Position : Vector3.Zero;
     public static float Rotation => Available ? Object.Rotation : 0;
-    public static bool IsMoving => Available && (AgentMap.Instance()->IsPlayerMoving || IsJumping);
+    /// <remarks>
+    /// 🔴 <c>AgentMap.Instance()</c> 真的可能回 <see langword="null"/>:它是 <c>[Agent]</c>
+    /// 來源產生器產出的取得器,產生的碼是 <c>AgentModule.Instance()</c> 為 null 時直接回 null,
+    /// 否則走 <c>GetAgentByInternalId</c>(那也不保證非 null),
+    /// 與 <c>[StaticAddress]</c> 不帶 <c>isPointer</c> 那種「失配時擲例外、永不回 null」的
+    /// 取得器不同(後者判空是死碼,不加)。
+    /// 取不到 agent 時退回只看 <see cref="IsJumping"/>,保留原式 <c>IsPlayerMoving || IsJumping</c>
+    /// 的另一半語意(＝不會因為讀不到 agent 就把「跳躍中」誤報成靜止)。
+    /// </remarks>
+    public static bool IsMoving
+    {
+        get
+        {
+            if(!Available) return false;
+            var agent = AgentMap.Instance();
+            if(agent != null && agent->IsPlayerMoving) return true;
+            return IsJumping;
+        }
+    }
     public static bool IsJumping => Available && (Svc.Condition[ConditionFlag.Jumping] || Svc.Condition[ConditionFlag.Jumping61] || Character->IsJumping());
     public static bool Mounted => Svc.Condition[ConditionFlag.Mounted];
     public static bool Mounting => Svc.Condition[ConditionFlag.MountOrOrnamentTransition];
