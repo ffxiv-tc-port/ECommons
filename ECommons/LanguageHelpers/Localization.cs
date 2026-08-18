@@ -34,6 +34,11 @@ public static class Localization
                 for(var i = 0; i < list.Length; i++)
                 {
                     var x = list[i].Replace("\\n", "\n");
+                    // 🔴 空行/純空白行直接跳過，不算「無效條目」。
+                    // Split 對「檔尾有換行」的檔必定多產生一個空字串元素，
+                    // 原寫法因此讓每個帶 Language*.ini 的外掛開場固定印一則 Invalid entry，
+                    // 行號恆等於檔案行數 —— 那是全艦隊常態雜訊，曾把崩潰鑑識帶往錯的方向。
+                    if(string.IsNullOrWhiteSpace(x)) continue;
                     var e = x.Split(Separator);
                     if(e.Length == 2)
                     {
@@ -45,7 +50,7 @@ public static class Localization
                     }
                     else
                     {
-                        PluginLog.Warning($"[Localization] Invalid entry {x} (line {i}) found in localization file {file}");
+                        PluginLog.Warning($"[Localization] Invalid entry {x} (line {i + 1}) found in localization file {file}");
                     }
                 }
                 PluginLog.Information($"[Localization] Loaded {CurrentLocalization.Count} entries");

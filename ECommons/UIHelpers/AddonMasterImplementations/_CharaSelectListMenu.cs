@@ -34,8 +34,13 @@ public unsafe partial class AddonMaster
         {
             get
             {
+                // 🔴 <c>AgentLobby.Instance()</c> 是 <c>[Agent]</c> 產生器產出的取得器，
+                // 真的可能回 null（AgentModule 未就緒或 GetAgentByInternalId 沒拿到）。
+                // 本屬性常在選角畫面進出時被輪詢，裸解參考＝AccessViolation（攔不到）。
+                var agent = AgentLobby.Instance();
+                if(agent == null) return [];
                 var ret = new List<Character>();
-                var charaSpan = AgentLobby.Instance()->LobbyData.CharaSelectEntries.ToArray();
+                var charaSpan = agent->LobbyData.CharaSelectEntries.ToArray();
                 for(var i = 0; i < charaSpan.Length; i++)
                 {
                     var s = charaSpan[i];
@@ -57,7 +62,14 @@ public unsafe partial class AddonMaster
             public uint CurrentWorld => Entry->CurrentWorldId;
             public bool IsVisitingAnotherDC => Entry->LoginFlags.HasFlag(CharaSelectCharacterEntryLoginFlags.Unk32);
             public bool CanLoginNormally => !Entry->LoginFlags.HasFlag(CharaSelectCharacterEntryLoginFlags.Locked) && !Entry->LoginFlags.HasFlag(CharaSelectCharacterEntryLoginFlags.NameChangeRequired) && !Entry->LoginFlags.HasFlag(CharaSelectCharacterEntryLoginFlags.MissingExVersionForLogin) && !Entry->LoginFlags.HasFlag(CharaSelectCharacterEntryLoginFlags.Unk32);
-            public bool IsSelected => AgentLobby.Instance()->HoveredCharacterContentId == Entry->ContentId;
+            public bool IsSelected
+            {
+                get
+                {
+                    var agent = AgentLobby.Instance();
+                    return agent != null && agent->HoveredCharacterContentId == Entry->ContentId;
+                }
+            }
 
             public Character(_CharaSelectListMenu master, int index, CharaSelectCharacterEntry* entry)
             {

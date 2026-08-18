@@ -153,7 +153,23 @@ public static unsafe class Player
     public static bool IsAnimationLocked => AnimationLock > 0;
     public static bool IsCasting => Available && Object.IsCasting();
     public static bool IsDead => Svc.Condition[ConditionFlag.Unconscious];
-    public static bool Revivable => IsDead && AgentRevive.Instance()->ReviveState != 0;
+    /// <remarks>
+    /// 🔴 <c>AgentRevive.Instance()</c> 真的可能回 <see langword="null"/>：它是 <c>[Agent]</c>
+    /// 來源產生器產出的取得器 —— <c>AgentModule.Instance()</c> 為 null 時直接回 null，
+    /// 否則走 <c>GetAgentByInternalId</c>（那也不保證非 null），
+    /// 與 <c>[StaticAddress]</c> 那種「失配時擲例外、永不回 null」的取得器不同。
+    /// 裸解參考在登入/登出交界是 AccessViolation，而 AVE 是 corrupted-state exception，
+    /// <c>try</c>/<c>catch</c> 攔不到。取不到 agent 時回 <see langword="false"/>（＝保守）。
+    /// </remarks>
+    public static bool Revivable
+    {
+        get
+        {
+            if(!IsDead) return false;
+            var agent = AgentRevive.Instance();
+            return agent != null && agent->ReviveState != 0;
+        }
+    }
 
     public static float DistanceTo(Vector3 other) => Vector3.Distance(Position, other);
     public static float DistanceTo(Vector2 other) => Vector2.Distance(Position.ToVector2(), other);
