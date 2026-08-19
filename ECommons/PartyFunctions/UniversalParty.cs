@@ -14,7 +14,18 @@ namespace ECommons.PartyFunctions;
 public static unsafe class UniversalParty
 {
     public static bool IsCrossWorldParty => Svc.Condition[ConditionFlag.ParticipatingInCrossWorldPartyOrAlliance];
-    public static bool IsAlliance => IsCrossWorldParty && InfoProxyCrossRealm.Instance()->IsInAllianceRaid;
+
+    // 🔴 IsCrossWorldParty 是 Dalamud 條件旗標,不是對 InfoProxyCrossRealm 指標的判空(假守衛):
+    // [InfoProxy] 產生器與 [Agent] 同構,Instance() 兩層合法回 null——旗標為真而 proxy 尚未建好的窗口仍會 AVE。
+    public static bool IsAlliance
+    {
+        get
+        {
+            if (!IsCrossWorldParty) return false;
+            var proxy = InfoProxyCrossRealm.Instance();
+            return proxy != null && proxy->IsInAllianceRaid;
+        }
+    }
 
     public static int Length => Members.Count;
     public static int LengthPlayback => MembersPlayback.Count;
