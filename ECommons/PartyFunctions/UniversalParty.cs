@@ -49,7 +49,9 @@ public static unsafe class UniversalParty
             };
             if(IsCrossWorldParty)
             {
+                // 與 IsAlliance 同理:旗標為真而 proxy 尚未建好的窗口,Instance() 合法回 null。
                 var proxy = InfoProxyCrossRealm.Instance();
+                if(proxy == null) return span;
                 for(var i = 0; i < proxy->GroupCount; i++)
                 {
                     var group = proxy->CrossRealmGroups[i];
