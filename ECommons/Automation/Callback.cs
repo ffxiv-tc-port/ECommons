@@ -66,7 +66,13 @@ public static unsafe class Callback
         var ret = AtkUnitBase_FireCallbackHook?.OriginalDisposeSafe(Base, valueCount, values, updateState);
         try
         {
-            PluginLog.Debug($"Callback on {Base->Name.Read()}, valueCount={valueCount}, updateState={updateState}\n{DecodeValues(valueCount, values).Select(x => $"    {x}").Join("\n")}");
+            // hook 參數是遊戲直接傳進來的原生指標。Base 實務上是成員函式的 this、極少為 null，
+            // 但這一行是 detour 裡每次 FireCallback 都會跑到的路徑
+            //（PluginLog.Debug 的內插字串沒有寫入端閘門，Debug 關著也照樣求值），
+            // 漏判的代價是在 detour 裡吃 AccessViolation —— corrupted-state exception，
+            // 外面這個 try/catch 攔不到。取不到就印佔位字串，不要讓一行 log 把遊戲帶崩。
+            var name = Base == null ? "<null>" : Base->Name.Read();
+            PluginLog.Debug($"Callback on {name}, valueCount={valueCount}, updateState={updateState}\n{DecodeValues(valueCount, values).Select(x => $"    {x}").Join("\n")}");
         }
         catch(Exception e)
         {
