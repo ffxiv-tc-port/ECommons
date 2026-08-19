@@ -2,6 +2,7 @@
 using Dalamud.Interface.Utility;
 using Dalamud.Plugin;
 using ECommons.ImGuiMethods;
+using ECommons.LanguageHelpers;
 using ECommons.Logging;
 using ECommons.Reflection;
 using Dalamud.Bindings.ImGui;
@@ -170,11 +171,11 @@ public static class PluginLoader
         {
             ImGuiEx.TextWrapped("Current version of the plugin has been marked as revoked.");
             ImGuiEx.TextWrapped("This means that there is an issue that can cause problems. Usually, updated version either already available or will be available as soon as possible. ");
-            if(ImGui.Button("Open plugin installer"))
+            if(ImGui.Button("Open plugin installer".Loc()))
             {
                 MicroServices.PluginInterface.OpenPluginInstallerTo();
             }
-            if(ImGui.Button("Close this window"))
+            if(ImGui.Button("Close this window".Loc()))
             {
                 MicroServices.PluginInterface.UiBuilder.Draw -= Draw;
             }
