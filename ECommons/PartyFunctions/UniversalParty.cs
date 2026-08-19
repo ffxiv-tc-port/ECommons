@@ -5,6 +5,7 @@ using ECommons.DalamudServices;
 using ECommons.GameFunctions;
 using ECommons.GameHelpers;
 using FFXIVClientStructs.FFXIV.Client.UI.Info;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -52,10 +53,10 @@ public static unsafe class UniversalParty
                 // 與 IsAlliance 同理:旗標為真而 proxy 尚未建好的窗口,Instance() 合法回 null。
                 var proxy = InfoProxyCrossRealm.Instance();
                 if(proxy == null) return span;
-                for(var i = 0; i < proxy->GroupCount; i++)
+                for(var i = 0; i < Math.Min((int)proxy->GroupCount, proxy->CrossRealmGroups.Length); i++)
                 {
                     var group = proxy->CrossRealmGroups[i];
-                    for(var c = 0; c < group.GroupMemberCount; c++)
+                    for(var c = 0; c < Math.Min((int)group.GroupMemberCount, group.GroupMembers.Length); c++)
                     {
                         var x = group.GroupMembers[c];
                         var name = GenericHelpers.Read(x.Name);

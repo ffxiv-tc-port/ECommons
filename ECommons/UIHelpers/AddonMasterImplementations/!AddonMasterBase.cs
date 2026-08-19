@@ -49,7 +49,7 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
             if(focus == null) return false;
             var manager = RaptureAtkUnitManager.Instance();
             if(manager == null) return false;
-            for(var i = 0; i < manager->FocusedUnitsList.Count; i++)
+            for(var i = 0; i < Math.Min((int)manager->FocusedUnitsList.Count, manager->FocusedUnitsList.Entries.Length); i++)
             {
                 var atk = manager->FocusedUnitsList.Entries[i].Value;
                 if(atk != null && atk->RootNode == GenericHelpers.GetRootNode(focus))
@@ -66,7 +66,7 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
         {
             var manager = RaptureAtkUnitManager.Instance();
             if(manager == null) return false;
-            for(var i = 0; i < manager->FocusedUnitsList.Count; i++)
+            for(var i = 0; i < Math.Min((int)manager->FocusedUnitsList.Count, manager->FocusedUnitsList.Entries.Length); i++)
             {
                 var atk = manager->FocusedUnitsList.Entries[i].Value;
                 if(atk != null && atk == Base) return true;
