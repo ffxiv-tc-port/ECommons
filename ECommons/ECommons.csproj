@@ -2,6 +2,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <Authors>NightmareXIV</Authors>
+        <!-- 🔴🔴 這個版本號不是裝飾品,調低會靜默毀掉全艦隊的加固。
+
+             多個外掛的建置圖裡同時存在兩條 ECommons 邊:
+               ① 主專案 → 本專案(ProjectReference,＝加固過的 fork)
+               ② 某個載體 → NuGet 上的 ECommons(PackageReference)
+                  載體:PunishLib(8 個外掛)、AutoRetainerAPI(5 個)、
+                       NightmareUI / NightmareUI.OtterGuiWrapper(4 個)
+             NuGet 統一這兩條邊的規則是**版本高者勝**,不是「ProjectReference 一定贏」。
+
+             ⇒ BaseVersion 一旦低於任何一條 PackageReference 的版本,那些外掛就會
+                靜默改吃**未加固**的 NuGet ECommons(缺 AddonMaster / ClickHelper
+                那批 AVE 修補)。建置零錯誤零警告,只有實機才看得出差別。
+
+             🔑 不變式:BaseVersion >= 全艦隊每一條 NuGet ECommons 邊的版本。
+                查驗:python C:/Users/lother/.claude/tools/fleet/ecommons_ship_audit.py
+                (最後一節「NuGet 覆蓋的版本序不變式」會逐條列出倒掛的邊)
+             📌 根治方向是把載體的 PackageReference 改成條件式,讓兩條邊互斥、
+                徹底不依賴版本比較 —— 樣板見 PunishLib 8674bc3。 -->
         <BaseVersion>3.0.1.15</BaseVersion>
         <PackageKind></PackageKind>
         <VersionSuffix Condition="'$(PackageKind)' != ''">-$(PackageKind)</VersionSuffix>
