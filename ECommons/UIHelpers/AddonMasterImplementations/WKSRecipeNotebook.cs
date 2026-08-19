@@ -1,8 +1,6 @@
-﻿using Dalamud.Memory;
-using ECommons.Automation;
+﻿using ECommons.Automation;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using System.Collections.Generic;
-using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
 using Callback = ECommons.Automation.Callback;
 
 namespace ECommons.UIHelpers.AddonMasterImplementations;
@@ -22,7 +20,11 @@ public partial class AddonMaster
         public AtkComponentButton* HQItemsButton => Addon->GetComponentButtonById(40);
         public AtkComponentButton* SynthesizeButton => Addon->GetComponentButtonById(50);
 
-        public string SelectedCraftingItem => MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[46].String.Value).GetText();
+        /// <remarks>
+        /// 🔴 三重守衛(索引在界內／型別真的是字串／字串指標非空),
+        /// 見 <see cref="GenericHelpers.TryGetAtkValueSeString"/>。讀不到時回空字串。
+        /// </remarks>
+        public string SelectedCraftingItem => GenericHelpers.GetAtkValueText(Addon, 46);
 
         public CraftItems[] CraftingItems
         {
@@ -31,19 +33,17 @@ public partial class AddonMaster
                 var ret = new List<CraftItems>();
                 for(var i = 0; i < 5; i++)
                 {
-                    var itemName = Addon->AtkValues[35 + i * 2];
-                    if(itemName.Type.EqualsAny(ValueType.String, ValueType.ManagedString, ValueType.String8))
-                    {
-                        var item = new CraftItems(this, i)
-                        {
-                            Name = MemoryHelper.ReadSeStringNullTerminated((nint)itemName.String.Value).GetText()
-                        };
-                        ret.Add(item);
-                    }
-                    else
-                    {
+                    // 🔴 原本只檢查 Type,沒有邊界檢查、也沒有 String.Value 判空 ——
+                    // 型別對但指標為空時照樣是攔不到的 AccessViolationException。
+                    // TryGetAtkValueSeString 三道一次做完;讀不到就當清單到此為止(與原本的 else break 同義)。
+                    if(!GenericHelpers.TryGetAtkValueSeString(Addon, 35 + i * 2, out var itemName))
                         break;
-                    }
+
+                    var item = new CraftItems(this, i)
+                    {
+                        Name = itemName.GetText()
+                    };
+                    ret.Add(item);
                 }
                 return [.. ret];
 

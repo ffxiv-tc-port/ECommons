@@ -22,24 +22,28 @@ public partial class AddonMaster
                 return node == null ? string.Empty : node->NodeText.GetText();
             }
         }
-        public uint ItemID => Addon->AtkUnitBase.AtkValues[2].UInt;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。原本是無界讀,讀的是陣列外的記憶體。
+        /// </remarks>
+        public uint ItemID => GenericHelpers.GetAtkValueUInt(Base, 2);
 
-        public int CurrentCollectability => Addon->AtkUnitBase.AtkValues[13].Int;
-        public int MaxCollectability => Addon->AtkUnitBase.AtkValues[14].Int;
-        public uint MinCollectability => Addon->AtkUnitBase.AtkValues[65].UInt;
-        public uint MidCollectability => Addon->AtkUnitBase.AtkValues[66].UInt;
-        public uint HighCollectability => Addon->AtkUnitBase.AtkValues[67].UInt;
+        public int CurrentCollectability => GenericHelpers.GetAtkValueInt(Base, 13);
+        public int MaxCollectability => GenericHelpers.GetAtkValueInt(Base, 14);
+        public uint MinCollectability => GenericHelpers.GetAtkValueUInt(Base, 65);
+        public uint MidCollectability => GenericHelpers.GetAtkValueUInt(Base, 66);
+        public uint HighCollectability => GenericHelpers.GetAtkValueUInt(Base, 67);
 
-        public uint CurrentIntegrity => Addon->AtkUnitBase.AtkValues[62].UInt;
+        public uint CurrentIntegrity => GenericHelpers.GetAtkValueUInt(Base, 62);
 
-        public uint TotalIntegrity => Addon->AtkUnitBase.AtkValues[63].UInt;
+        public uint TotalIntegrity => GenericHelpers.GetAtkValueUInt(Base, 63);
 
-        public uint GatherChance => Addon->AtkUnitBase.AtkValues[18].UInt;
+        public uint GatherChance => GenericHelpers.GetAtkValueUInt(Base, 18);
 
-        public int ScourPower => Addon->AtkUnitBase.AtkValues[48].Int;
-        public int BrazenPowerMin => Addon->AtkUnitBase.AtkValues[49].Int;
-        public int BrazenPowerMax => Addon->AtkUnitBase.AtkValues[50].Int;
-        public int MeticulousPower => Addon->AtkUnitBase.AtkValues[51].Int;
+        public int ScourPower => GenericHelpers.GetAtkValueInt(Base, 48);
+        public int BrazenPowerMin => GenericHelpers.GetAtkValueInt(Base, 49);
+        public int BrazenPowerMax => GenericHelpers.GetAtkValueInt(Base, 50);
+        public int MeticulousPower => GenericHelpers.GetAtkValueInt(Base, 51);
 
         /// <remarks>
         /// 🔴 <c>GetComponentNodeById</c> 找不到節點時<b>合法回 null</b>,而 <c>GetAsAtkComponent*()</c>

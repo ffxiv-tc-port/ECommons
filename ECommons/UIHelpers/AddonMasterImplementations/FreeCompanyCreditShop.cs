@@ -1,5 +1,4 @@
-﻿using Dalamud.Memory;
-using ECommons.Automation;
+﻿using ECommons.Automation;
 using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Callback = ECommons.Automation.Callback;
@@ -12,11 +11,22 @@ public partial class AddonMaster
         public FreeCompanyCreditShop(nint addon) : base(addon) { }
         public FreeCompanyCreditShop(void* addon) : base(addon) { }
 
-        public uint FreeCompanyRank => Addon->AtkValues[0].UInt;
-        public bool Unk01 => Addon->AtkValues[1].Bool;
-        public uint CompanyCredits => Addon->AtkValues[3].UInt;
-        public bool Unk05 => Addon->AtkValues[5].Bool;
-        public uint ItemCount => Addon->AtkValues[9].UInt;
+        /// <remarks>索引出界時回 0,見 <see cref="GenericHelpers.GetAtkValueInt"/>。</remarks>
+        public uint FreeCompanyRank => GenericHelpers.GetAtkValueUInt(Addon, 0);
+
+        /// <inheritdoc cref="FreeCompanyRank"/>
+        public bool Unk01 => GenericHelpers.GetAtkValueBool(Addon, 1);
+
+        /// <inheritdoc cref="FreeCompanyRank"/>
+        public uint CompanyCredits => GenericHelpers.GetAtkValueUInt(Addon, 3);
+
+        /// <inheritdoc cref="FreeCompanyRank"/>
+        public bool Unk05 => GenericHelpers.GetAtkValueBool(Addon, 5);
+
+        /// <remarks>
+        /// 索引出界時回 0 —— <see cref="Items"/> 因此得到空陣列而不是用垃圾長度去配置。
+        /// </remarks>
+        public uint ItemCount => GenericHelpers.GetAtkValueUInt(Addon, 9);
 
         public Item[] Items
         {
@@ -47,13 +57,16 @@ public partial class AddonMaster
             {
                 Am = am;
                 Index = index;
-                ItemName = MemoryHelper.ReadSeStringNullTerminated((nint)Am.Addon->AtkValues[10 + index].String.Value).GetText();
-                ItemId = Am.Addon->AtkValues[30 + index].UInt;
-                IconId = Am.Addon->AtkValues[50 + index].Int;
-                Rank = Am.Addon->AtkValues[70 + index].UInt;
-                QuantityInInventory = (int)Am.Addon->AtkValues[90 + index].UInt;
-                MaxPurchaseSize = Am.Addon->AtkValues[110 + index].Int;
-                Price = Am.Addon->AtkValues[130 + index].UInt; // for a single unit
+                // 🔴 全部改走 GenericHelpers 的界內存取。原寫法對 ItemName 的 String.Value 無檢查
+                // 直接解參考(型別不符 = 垃圾指標 = 攔不到的 AccessViolationException),
+                // 其餘欄位則是無界讀。ItemName 讀不到時回空字串,其餘回 0。
+                ItemName = GenericHelpers.GetAtkValueText(Am.Addon, 10 + index);
+                ItemId = GenericHelpers.GetAtkValueUInt(Am.Addon, 30 + index);
+                IconId = GenericHelpers.GetAtkValueInt(Am.Addon, 50 + index);
+                Rank = GenericHelpers.GetAtkValueUInt(Am.Addon, 70 + index);
+                QuantityInInventory = (int)GenericHelpers.GetAtkValueUInt(Am.Addon, 90 + index);
+                MaxPurchaseSize = GenericHelpers.GetAtkValueInt(Am.Addon, 110 + index);
+                Price = GenericHelpers.GetAtkValueUInt(Am.Addon, 130 + index); // for a single unit
             }
 
             public readonly void Buy(int quantity)

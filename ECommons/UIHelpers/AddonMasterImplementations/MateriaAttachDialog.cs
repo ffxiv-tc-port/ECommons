@@ -14,7 +14,11 @@ public partial class AddonMaster
 
         public MateriaAttachDialog(void* addon) : base(addon) { }
 
-        public int SuccessRate => Base->AtkValues[41].Int;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。原本是無界讀,讀的是陣列外的記憶體。
+        /// </remarks>
+        public int SuccessRate => GenericHelpers.GetAtkValueInt(Base, 41);
         /// <remarks>
         /// 🔴 <c>GetTextNodeById</c> 找不到節點時<b>合法回 null</b>,而 <c>&amp;node->NodeText</c>
         /// 對 null 節點<b>不會當場崩</b>:<c>NodeText</c> 在 <c>AtkTextNode</c> 偏移 0xC0,

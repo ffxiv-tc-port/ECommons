@@ -1,5 +1,4 @@
 ﻿using Dalamud.Game.Text.SeStringHandling;
-using Dalamud.Memory;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace ECommons.UIHelpers.AddonMasterImplementations;
@@ -17,21 +16,42 @@ public partial class AddonMaster
         public AtkComponentButton* DisplayHelpButton => Addon->GetComponentButtonById(8);
         public AtkComponentButton* UseAsInstantPortraitButton => Addon->GetComponentButtonById(34);
 
-        public int NumPortraits => Addon->AtkValues[17].Int;
-        public int SelectedPortrait => Addon->AtkValues[18].Int; // 0 indexed
-        public int CharacterOption1IconId => Addon->AtkValues[6].Int;
-        public int CharacterOption2IconId => Addon->AtkValues[8].Int;
-        public int BackgroundIconId => Addon->AtkValues[10].Int;
-        public int FrameIconId => Addon->AtkValues[12].Int;
-        public int AccentIconId => Addon->AtkValues[14].Int;
+        /// <remarks>索引出界時回 0,見 <see cref="GenericHelpers.GetAtkValueInt"/>。</remarks>
+        public int NumPortraits => GenericHelpers.GetAtkValueInt(Addon, 17);
 
+        /// <inheritdoc cref="NumPortraits"/>
+        public int SelectedPortrait => GenericHelpers.GetAtkValueInt(Addon, 18); // 0 indexed
+
+        /// <inheritdoc cref="NumPortraits"/>
+        public int CharacterOption1IconId => GenericHelpers.GetAtkValueInt(Addon, 6);
+
+        /// <inheritdoc cref="NumPortraits"/>
+        public int CharacterOption2IconId => GenericHelpers.GetAtkValueInt(Addon, 8);
+
+        /// <inheritdoc cref="NumPortraits"/>
+        public int BackgroundIconId => GenericHelpers.GetAtkValueInt(Addon, 10);
+
+        /// <inheritdoc cref="NumPortraits"/>
+        public int FrameIconId => GenericHelpers.GetAtkValueInt(Addon, 12);
+
+        /// <inheritdoc cref="NumPortraits"/>
+        public int AccentIconId => GenericHelpers.GetAtkValueInt(Addon, 14);
+
+        /// <remarks>
+        /// ⚠️ <see cref="NumPortraits"/> 是從 AtkValue 讀出來的,面板未載入時可能是負值 ——
+        /// <c>new Portraits[負數]</c> 會擲 <see cref="System.OverflowException"/>。夾成 0(＝空清單)。
+        /// </remarks>
         public Portraits[] Portrait
         {
             get
             {
-                var ret = new Portraits[NumPortraits];
+                var count = NumPortraits;
+                if(count <= 0)
+                    return [];
+
+                var ret = new Portraits[count];
                 for(var i = 0; i < ret.Length; i++)
-                    ret[i] = new(Addon, Addon->AtkValues[23 + 7 * i].Int);
+                    ret[i] = new(Addon, GenericHelpers.GetAtkValueInt(Addon, 23 + 7 * i));
                 return ret;
             }
         }
@@ -81,16 +101,20 @@ public partial class AddonMaster
                 ListIndex = index;
 
                 var offset = 7 * (ListIndex - 1);
-                Unk01 = Addon->AtkValues[21 + offset].UInt;
-                ClassJobIconId = Addon->AtkValues[22 + offset].Int;
-                GlamourPlateId = Addon->AtkValues[24 + offset].Int;
-                PortraitBroken = Addon->AtkValues[25 + offset].Int;
-                Unk06 = Addon->AtkValues[26 + offset].Int;
-                UseAsInstantPortrait = Addon->AtkValues[27 + offset].Int;
+                Unk01 = GenericHelpers.GetAtkValueUInt(Addon, 21 + offset);
+                ClassJobIconId = GenericHelpers.GetAtkValueInt(Addon, 22 + offset);
+                GlamourPlateId = GenericHelpers.GetAtkValueInt(Addon, 24 + offset);
+                PortraitBroken = GenericHelpers.GetAtkValueInt(Addon, 25 + offset);
+                Unk06 = GenericHelpers.GetAtkValueInt(Addon, 26 + offset);
+                UseAsInstantPortrait = GenericHelpers.GetAtkValueInt(Addon, 27 + offset);
 
+                // 🔴 索引 791/792 是全檔最大的寫死索引,面板未載滿時遠遠出界;
+                // 原寫法還對 String.Value 無檢查直接解參考(型別不符 = 垃圾指標 =
+                // 攔不到的 AccessViolationException)。三道守衛見 GenericHelpers.TryGetAtkValueSeString。
+                // 讀不到時回空 SeString,維持既有的非可空欄位型別。
                 var offset2 = 2 * (ListIndex - 1);
-                GearSetName = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[791 + offset2].String.Value);
-                GearSetILvl = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[792 + offset2].String.Value);
+                GearSetName = GenericHelpers.GetAtkValueSeString(Addon, 791 + offset2) ?? (SeString)string.Empty;
+                GearSetILvl = GenericHelpers.GetAtkValueSeString(Addon, 792 + offset2) ?? (SeString)string.Empty;
             }
         }
 

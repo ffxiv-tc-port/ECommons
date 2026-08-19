@@ -15,15 +15,20 @@ public partial class AddonMaster
         public AtkComponentButton* ConfirmButton => Addon->GetComponentButtonById(21);
         public AtkComponentButton* CancelButton => Addon->GetComponentButtonById(22);
 
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。原本是無界讀,讀的是陣列外的記憶體。
+        /// </remarks>
         public int AskingPrice
         {
-            get => Addon->AtkValues[5].Int;
+            get => GenericHelpers.GetAtkValueInt(Base, 5);
             set => Callback.Fire(Base, true, 2, value);
         }
 
+        /// <inheritdoc cref="AskingPrice"/>
         public int Quantity
         {
-            get => Addon->AtkValues[8].Int;
+            get => GenericHelpers.GetAtkValueInt(Base, 8);
             set => Callback.Fire(Base, true, 3, value);
         }
 

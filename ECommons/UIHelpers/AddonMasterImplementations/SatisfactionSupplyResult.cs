@@ -10,8 +10,12 @@ public partial class AddonMaster
         public SatisfactionSupplyResult(void* addon) : base(addon) { }
         public override string AddonDescription { get; } = "Custom Deliveries Rank Up Window";
 
-        public uint CurrentLevelXp => Addon->AtkValues[10].UInt;
-        public uint TotalLevelXp => Addon->AtkValues[11].UInt;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。原本是無界讀,讀的是陣列外的記憶體。
+        /// </remarks>
+        public uint CurrentLevelXp => GenericHelpers.GetAtkValueUInt(Addon, 10);
+        public uint TotalLevelXp => GenericHelpers.GetAtkValueUInt(Addon, 11);
 
         public AtkComponentButton* AcceptButton => Addon->GetComponentButtonById(36);
 

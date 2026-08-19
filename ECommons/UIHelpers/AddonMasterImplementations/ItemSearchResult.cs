@@ -13,14 +13,25 @@ public partial class AddonMaster
         public ItemSearchResult(void* addon) : base(addon) { }
 
         public AtkComponentList* ListComponent => Addon->Results;
+
+        /// <remarks>
+        /// 🔴 <c>AddonItemSearchResult.Results</c> 是<b>指標欄位</b>,版面建好之前是 null;
+        /// 原本直接 <c>ListComponent-&gt;GetItemCount()</c> 是解空指標 = AccessViolationException,
+        /// 而 AVE 是 corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。取不到時回空清單
+        /// (<see cref="Entries"/> 因此也是空的 —— 這是保守方向:不會憑空生出不存在的商品列)。
+        /// </remarks>
         public List<Pointer<AtkComponentListItemRenderer>> ListItems
         {
             get
             {
                 List<Pointer<AtkComponentListItemRenderer>> items = [];
-                foreach(var node in Enumerable.Range(0, ListComponent->GetItemCount()))
+                var list = ListComponent;
+                if(list == null)
+                    return items;
+
+                foreach(var node in Enumerable.Range(0, list->GetItemCount()))
                 {
-                    var item = ListComponent->GetItemRenderer(node);
+                    var item = list->GetItemRenderer(node);
                     if(item == null)
                         continue;
                     items.Add(item);

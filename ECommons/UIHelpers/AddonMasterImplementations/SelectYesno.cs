@@ -1,6 +1,5 @@
 ﻿using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Memory;
 using ECommons.DalamudServices;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -32,10 +31,22 @@ public partial class AddonMaster
                 return node == null ? string.Empty : GenericHelpers.ReadSeString(&node->NodeText);
             }
         }
-        public SeString SeStringNullTerminated => MemoryHelper.ReadSeStringNullTerminated(new nint(Addon->AtkValues[0].String));
+        /// <remarks>
+        /// 🔴 <see cref="SeString"/> 的姊妹屬性,原本同樣沒有任何守衛:
+        /// <c>AtkValues[0]</c> 在 addon 剛開窗時可能根本還沒配置(<c>AtkValuesCount</c> 為 0),
+        /// 型別不符時 <c>String</c> 讀到的是別的欄位被當成指標 —— 兩者都是
+        /// AccessViolationException,而 AVE 是 corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。
+        /// 三道守衛見 <see cref="GenericHelpers.TryGetAtkValueSeString"/>;
+        /// 讀不到時回空字串(維持既有的非可空簽章,<see cref="TextLegacy"/> 也才不會 NRE)。
+        /// </remarks>
+        public SeString SeStringNullTerminated => GenericHelpers.GetAtkValueSeString(Base, 0) ?? (SeString)string.Empty;
         public string Text => SeString.GetText();
         public string TextLegacy => string.Join(string.Empty, SeStringNullTerminated.Payloads.OfType<TextPayload>().Select(t => t.Text)).Replace('\n', ' ').Trim();
-        public int ButtonsVisible => Enumerable.Range(1, 3).Count(x => Addon->AtkValues[x].Type.EqualsAny(ValueType.String, ValueType.String8, ValueType.ManagedString, ValueType.WideString));
+
+        /// <remarks>
+        /// 索引出界時該格算成「不是字串」⇒ 不計入,見 <see cref="GenericHelpers.GetAtkValueType"/>。
+        /// </remarks>
+        public int ButtonsVisible => Enumerable.Range(1, 3).Count(x => GenericHelpers.GetAtkValueType(Base, x).EqualsAny(ValueType.String, ValueType.String8, ValueType.ManagedString, ValueType.WideString));
 
         public AtkComponentButton* ThirdButton => Addon->GetComponentButtonById(14);
 

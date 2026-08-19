@@ -1,5 +1,4 @@
 ﻿using Dalamud.Game.Text.SeStringHandling;
-using Dalamud.Memory;
 using ECommons.Automation;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -36,14 +35,24 @@ public partial class AddonMaster
         public string Text => SeString.GetText();
 
         public AtkComponentList* ListComponent => Addon->GetComponentListById(3);
+
+        /// <remarks>
+        /// 🔴 <see cref="ListComponent"/> 是節點取得器,找不到就<b>合法回 null</b>;
+        /// 原本直接 <c>ListComponent-&gt;GetItemCount()</c> 是解空指標 = AccessViolationException,
+        /// 而 AVE 是 corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。取不到時回空清單。
+        /// </remarks>
         public List<Pointer<AtkComponentListItemRenderer>> ListItems
         {
             get
             {
                 List<Pointer<AtkComponentListItemRenderer>> items = [];
-                foreach(var node in Enumerable.Range(0, ListComponent->GetItemCount()))
+                var list = ListComponent;
+                if(list == null)
+                    return items;
+
+                foreach(var node in Enumerable.Range(0, list->GetItemCount()))
                 {
-                    var item = ListComponent->GetItemRenderer(node);
+                    var item = list->GetItemRenderer(node);
                     if(item == null)
                         continue;
                     items.Add(item);
@@ -56,7 +65,11 @@ public partial class AddonMaster
         {
             get
             {
-                var ret = new Entry[EntryCount];
+                var count = EntryCount;
+                if(count <= 0)
+                    return [];
+
+                var ret = new Entry[count];
                 for(var i = 0; i < ret.Length; i++)
                 {
                     ret[i] = new(this, Addon, i);
@@ -72,8 +85,39 @@ public partial class AddonMaster
             private readonly AddonSelectString* Addon = addon;
             public int Index { get; init; } = index;
 
-            public readonly AtkTextNode* TextNode => am.ListItems[Index].Value->ButtonTextNode;
-            public readonly SeString SeString => MemoryHelper.ReadSeStringNullTerminated((nint)Addon->PopupMenu.PopupMenu.EntryNames[Index].Value);
+            /// <remarks>
+            /// 🔴 <see cref="ListItems"/> 的長度是<b>清單元件實際有幾個 renderer</b>,與
+            /// <see cref="EntryCount"/>(來自 <c>PopupMenu</c>)是兩個獨立來源,對不上時
+            /// <c>am.ListItems[Index]</c> 會擲 <see cref="ArgumentOutOfRangeException"/>,
+            /// 而 <c>.Value</c> 本身也可能是 null(裸解參考 = 攔不到的 AccessViolationException)。
+            /// 取不到時回 <see langword="null"/> —— 呼叫端本來就在處理指標,判空是它的既有義務。
+            /// </remarks>
+            public readonly AtkTextNode* TextNode
+            {
+                get
+                {
+                    var items = am.ListItems;
+                    if(Index < 0 || Index >= items.Count)
+                        return null;
+                    var renderer = items[Index].Value;
+                    return renderer == null ? null : renderer->ButtonTextNode;
+                }
+            }
+
+            /// <remarks>
+            /// 🔴 守衛版讀取,見 <see cref="GenericHelpers.TryGetPopupMenuEntryName"/>。
+            /// 讀不到時回空字串,維持既有的非可空簽章(<see cref="Text"/> 與
+            /// <see cref="ToString"/> 才不會 NRE)。
+            /// </remarks>
+            public readonly SeString SeString
+            {
+                get
+                {
+                    if(Addon == null)
+                        return string.Empty;
+                    return GenericHelpers.GetPopupMenuEntryName(&Addon->PopupMenu.PopupMenu, Index) ?? (SeString)string.Empty;
+                }
+            }
             public readonly string Text => SeString.GetText();
 
             public readonly void Select()

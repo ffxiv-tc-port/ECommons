@@ -1,4 +1,6 @@
-﻿using ECommons.DalamudServices;
+﻿using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Memory;
+using ECommons.DalamudServices;
 using ECommons.UIHelpers.AddonMasterImplementations;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using System;
@@ -252,4 +254,149 @@ public static unsafe partial class GenericHelpers
         }
         return false;
     }
+
+    /// <summary>
+    /// 安全取得 <c>addon-&gt;AtkValues[index]</c> 的<b>複本</b>。這是 AddonMaster 讀取 AtkValue 的統一入口。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <c>AtkUnitBase.AtkValues</c> 是<b>指標欄位</b>(偏移 0x178),長度在 <c>AtkValuesCount</c>
+    /// (偏移 0x1E2,<see cref="ushort"/>)。AddonMaster 裡大量索引是寫死的(最高到 1062),
+    /// 而 addon 剛開窗、切分頁、或台服版面與國際服不同時,實際長度可能遠小於那個索引。
+    /// 無界讀本身就是讀陣列外的記憶體;讀出來的 8 個位元組若被當成 <c>String</c> 指標解參考,
+    /// 就是 AccessViolationException —— 而 AVE 在 .NET Core 是 corrupted-state exception,
+    /// <c>try</c>/<c>catch</c> 與任何例外隔離包裝都攔不到。
+    /// <br/>
+    /// 📌 回傳的是<b>複本</b>而不是 <c>ref</c>:呼叫端後續讀 <c>.Type</c> / <c>.String</c> 時
+    /// 不會再碰一次原生記憶體,避免「檢查時是字串、使用時已被換掉」的 TOCTOU。
+    /// <br/>
+    /// ⚠️ <c>value = default</c> 是刻意的,<b>不能</b>寫成 <c>new AtkValue()</c> ——
+    /// <see cref="AtkValue"/> 的無參數建構子會呼叫原生 <c>Ctor()</c>。
+    /// </remarks>
+    /// <returns>
+    /// <see langword="false"/> 當 <paramref name="addon"/> 為 null、<c>AtkValues</c> 尚未配置、
+    /// 或 <paramref name="index"/> 出界。此時 <paramref name="value"/> 是全零的 <c>Undefined</c>。
+    /// </returns>
+    public static bool TryGetAtkValue(AtkUnitBase* addon, int index, out AtkValue value)
+    {
+        value = default;
+        if(addon == null || addon->AtkValues == null) return false;
+        if(index < 0 || index >= addon->AtkValuesCount) return false;
+        value = addon->AtkValues[index];
+        return true;
+    }
+
+    /// <summary>
+    /// 安全讀取 <c>AtkValues[index]</c> 的整數欄位。索引出界時回 <paramref name="fallback"/>。
+    /// </summary>
+    /// <remarks>
+    /// 📌 這裡<b>刻意不檢查</b> <c>Type</c>:<see cref="AtkValue"/> 的數值欄位是同一個 union
+    /// (全部在偏移 0x8),<c>Int</c>/<c>UInt</c>/<c>Bool</c> 讀的是同一批位元組。加上型別檢查會
+    /// 改變既有呼叫端在型別不符時拿到的值 —— 那是回退既有行為。這裡只補<b>邊界</b>,
+    /// 因為只有邊界能造成讀出界。
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int GetAtkValueInt(AtkUnitBase* addon, int index, int fallback = 0)
+        => TryGetAtkValue(addon, index, out var value) ? value.Int : fallback;
+
+    /// <inheritdoc cref="GetAtkValueInt"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint GetAtkValueUInt(AtkUnitBase* addon, int index, uint fallback = 0)
+        => TryGetAtkValue(addon, index, out var value) ? value.UInt : fallback;
+
+    /// <inheritdoc cref="GetAtkValueInt"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool GetAtkValueBool(AtkUnitBase* addon, int index, bool fallback = false)
+        => TryGetAtkValue(addon, index, out var value) ? value.Bool : fallback;
+
+    /// <summary>
+    /// 安全讀取 <c>AtkValues[index]</c> 的型別。索引出界時回 <see cref="ValueType.Undefined"/>(＝0)。
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ValueType GetAtkValueType(AtkUnitBase* addon, int index)
+        => TryGetAtkValue(addon, index, out var value) ? value.Type : ValueType.Undefined;
+
+    /// <summary>
+    /// 三重守衛版的 AtkValue 字串讀取:①索引在界內 ②型別真的是字串 ③字串指標非空。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這三道缺任何一道都是實機崩潰過的形狀(2026-08-02 宇宙探索高難任務面板)。
+    /// 型別不符時 <c>String.Value</c> 讀到的是 <c>Int</c>/<c>Float</c> 那幾個位元組被當成指標,
+    /// 交給 <c>MemoryHelper.ReadSeStringNullTerminated</c> 掃 null 結尾就是 AccessViolation。
+    /// <br/>
+    /// ⚠️ <see cref="IsString(AtkValue)"/> 本身已經含 <c>String.HasValue</c>,這裡仍然把
+    /// <c>String.Value == null</c> 明寫出來 —— 守衛的意圖要在呼叫點看得見,
+    /// 而不是依賴另一個函式的實作細節。
+    /// <br/>
+    /// ⚠️ <b><c>ValueType.WideString</c> 刻意<u>不</u>接受</b>,即使 <see cref="IsString(AtkValue)"/> 接受它。
+    /// WideString 是 UTF-16,交給 UTF-8 的 <c>ReadSeStringNullTerminated</c> 只會得到亂碼或
+    /// 被第一個 <c>0x00</c> 截斷的單字元 —— 沒有任何呼叫端能有意義地消費那個值。
+    /// 📌 這也<b>正好保住</b> <c>WKSMission</c>／<c>WKSRecipeNotebook</c> 原本就寫死的較窄集合
+    /// (<c>String</c>／<c>ManagedString</c>／<c>String8</c>,不含 WideString):
+    /// 那兩處遇到非字串會 <c>break</c> 收尾,若改用較寬的 <c>IsString()</c> 就會多列出一筆亂碼項目。
+    /// </remarks>
+    public static bool TryGetAtkValueSeString(AtkUnitBase* addon, int index, out SeString result)
+    {
+        result = null!;
+        if(!TryGetAtkValue(addon, index, out var value)) return false;
+        if(value.Type != ValueType.String && value.Type != ValueType.String8 && value.Type != ValueType.ManagedString) return false;
+        if(value.String.Value == null) return false;
+        var read = MemoryHelper.ReadSeStringNullTerminated((nint)value.String.Value);
+        if(read == null) return false;
+        result = read;
+        return true;
+    }
+
+    /// <summary>
+    /// <see cref="TryGetAtkValueSeString"/> 的表達式版本。讀不到時回 <see langword="null"/> ——
+    /// 呼叫端能區分「面板還沒載入」與「載入了但是空字串」。
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static SeString? GetAtkValueSeString(AtkUnitBase* addon, int index)
+        => TryGetAtkValueSeString(addon, index, out var result) ? result : null;
+
+    /// <inheritdoc cref="GetAtkValueSeString"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string? GetAtkValueTextOrNull(AtkUnitBase* addon, int index)
+        => TryGetAtkValueSeString(addon, index, out var result) ? result.GetText() : null;
+
+    /// <summary>
+    /// <see cref="GetAtkValueTextOrNull"/> 的不可空版本,讀不到時回<b>空字串</b>。
+    /// 給既有簽章就是 <see cref="string"/>(非可空)的存取子用,避免改簽章回退呼叫端。
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string GetAtkValueText(AtkUnitBase* addon, int index)
+        => GetAtkValueTextOrNull(addon, index) ?? "";
+
+    /// <summary>
+    /// 守衛版的 <c>PopupMenu.EntryNames[index]</c> 讀取(SelectString / SelectIconString 的條目文字)。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這是 AtkValue 字串以外的<b>同構形狀</b>:<c>PopupMenu.EntryNames</c> 是
+    /// <c>CStringPointer*</c>(偏移 0x10 的<b>指標欄位</b>),長度在 <c>EntryCount</c>(偏移 0x4C)。
+    /// 選單建好之前 <c>EntryNames</c> 是 null,而條目數是<b>執行期</b>決定的 ——
+    /// 原寫法 <c>EntryNames[Index].Value</c> 既沒判空也沒對 <c>EntryCount</c> 做邊界檢查,
+    /// 兩者都會把垃圾位址交給 <c>MemoryHelper</c> 掃 null 結尾 = AccessViolationException,
+    /// 而 AVE 在 .NET Core 是 corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。
+    /// <br/>
+    /// ⚠️ 呼叫端取 <c>&amp;addon-&gt;PopupMenu.PopupMenu</c> 之前<b>必須自己先判 addon 非空</b> ——
+    /// 取欄位位址不會解參考,null 會靜默算成一個長得像小整數的毒指標,
+    /// 本函式的 <c>menu == null</c> 擋不到它。
+    /// </remarks>
+    public static bool TryGetPopupMenuEntryName(FFXIVClientStructs.FFXIV.Client.UI.PopupMenu* menu, int index, out SeString result)
+    {
+        result = null!;
+        if(menu == null || menu->EntryNames == null) return false;
+        if(index < 0 || index >= menu->EntryCount) return false;
+        var entry = menu->EntryNames[index].Value;
+        if(entry == null) return false;
+        var read = MemoryHelper.ReadSeStringNullTerminated((nint)entry);
+        if(read == null) return false;
+        result = read;
+        return true;
+    }
+
+    /// <inheritdoc cref="TryGetPopupMenuEntryName"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static SeString? GetPopupMenuEntryName(FFXIVClientStructs.FFXIV.Client.UI.PopupMenu* menu, int index)
+        => TryGetPopupMenuEntryName(menu, index, out var result) ? result : null;
 }

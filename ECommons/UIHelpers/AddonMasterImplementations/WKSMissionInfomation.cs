@@ -47,7 +47,9 @@ public partial class AddonMaster
         {
             get
             {
-                if(Addon->AtkValuesCount < 3 || !Addon->AtkValues[2].IsString())
+                // 第三道(String.Value 判空)原本漏在這一格 —— IsString() 內部雖然含
+                // String.HasValue,但守衛的意圖要在呼叫點看得見,而不是靠另一個函式的實作細節。
+                if(Addon->AtkValuesCount < 3 || !Addon->AtkValues[2].IsString() || Addon->AtkValues[2].String.Value == null)
                     return null;
 
                 var rawValue = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[2].String.Value);
