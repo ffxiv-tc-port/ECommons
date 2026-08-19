@@ -28,10 +28,24 @@ public unsafe partial class AddonMaster
             get
             {
                 var ret = new List<World>();
-                var stringArray = RaptureAtkModule.Instance()->AtkArrayDataHolder.StringArrays[1];
+                // 🔴 RaptureAtkModule.Instance() 是 FFXIVClientStructs 裡手寫的取得器,本體就是
+                // 「UIModule.Instance() 為 null 就回 null」—— 而本屬性正好是在登入畫面進出時被輪詢,
+                // 那就是模組還沒建好的時機。裸解參考＝AccessViolation,攔不到。
+                var module = RaptureAtkModule.Instance();
+                if(module == null) return [];
+                // AtkArrayDataHolder.StringArrays 是 StringArrayData**(AtkModule+0x1B90 內的 +0x30),
+                // 取 [1] 會解參考這個雙重指標,所以指標本身與取回的項目都要判;
+                // StringArrayCount 是總槽數,拿它擋掉越界索引。
+                var holder = module->AtkArrayDataHolder;
+                if(holder.StringArrays == null || holder.StringArrayCount <= 1) return [];
+                var stringArray = holder.StringArrays[1];
+                if(stringArray == null || stringArray->StringArray == null) return [];
                 for(var i = 0; i < 16; i++)
                 {
                     var str = stringArray->StringArray[i];
+                    // 空指標與空字串一樣代表「後面沒有世界了」——原本會把 0 位址交給
+                    // ReadStringNullTerminated 去掃,那是 AccessViolation 不是空字串。
+                    if(str.Value == null) break;
                     var worldName = MemoryHelper.ReadStringNullTerminated((nint)str.Value).Trim();
                     if(worldName.IsNullOrEmpty()) break;
                     ret.Add(new(this, i, worldName));

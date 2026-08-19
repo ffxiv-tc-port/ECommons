@@ -25,7 +25,8 @@ public unsafe partial class AddonMaster
 
         public void SelectWorld()
         {
-            var evt = CreateAtkEvent(1);
+            // 取不到 AtkStage 就完全不送事件,理由見 AddonMasterBase.TryCreateAtkEvent。
+            if(!TryCreateAtkEvent(out var evt, 1)) return;
             var data = CreateAtkEventData().Build();
             Base->ReceiveEvent((AtkEventType)25, 1, &evt, &data);
         }
@@ -90,7 +91,9 @@ public unsafe partial class AddonMaster
             private void Click(bool right)
             {
                 var eventIndex = (byte)(5 + Index);
-                var evt = stackalloc AtkEvent[] { Master.CreateAtkEvent(eventIndex) };
+                // 取不到 AtkStage 就完全不送事件,理由見 AddonMasterBase.TryCreateAtkEvent。
+                if(!Master.TryCreateAtkEvent(out var atkEvent, eventIndex)) return;
+                var evt = stackalloc AtkEvent[] { atkEvent };
                 var data = stackalloc AtkEventData[] { Master.CreateAtkEventData().Write<byte>(6, (byte)(right ? 1 : 0)).Build() };
                 Master.Base->ReceiveEvent(AtkEventType.MouseClick, eventIndex, evt, data);
             }

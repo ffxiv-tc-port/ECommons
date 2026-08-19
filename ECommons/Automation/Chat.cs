@@ -115,7 +115,18 @@ public static unsafe class Chat
     [Obsolete("Use safe message sending")]
     public static void SendMessageUnsafe(byte[] message)
     {
-        var uiModule = (IntPtr)Framework.Instance()->GetUIModule();
+        // 🔴 Framework.Instance() 宣告成 [StaticAddress(..., isPointer: true)],回的是靜態位址裡存放的
+        // 指標值 —— 產生器只在特徵碼失配時擲例外,對回傳值不判空,登入前/關閉中真的會是 null。
+        // GetUIModule() 是 [MemberFunction] 原生呼叫,對 null 的 this 呼叫會在遊戲碼裡解參考 ＝
+        // AccessViolation(corrupted-state exception,try/catch 攔不到);就算僥倖回來,
+        // ProcessChatBox 也會拿著假的 uiModule 再崩一次。
+        // 本檔既有慣例就是缺必要前提時擲 InvalidOperationException(見上面兩個特徵碼取得器),
+        // 這裡沿用:訊息不送出,呼叫端拿到的是可攔截的例外而不是遊戲崩潰。
+        var framework = Framework.Instance();
+        if(framework == null) throw new InvalidOperationException("Framework is not available; chat message was not sent.");
+        var uiModulePtr = framework->GetUIModule();
+        if(uiModulePtr == null) throw new InvalidOperationException("UIModule is not available; chat message was not sent.");
+        var uiModule = (IntPtr)uiModulePtr;
         using var payload = new ChatPayload(message);
         var mem1 = Marshal.AllocHGlobal(400);
         Marshal.StructureToPtr(payload, mem1, false);

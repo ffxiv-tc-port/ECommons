@@ -126,21 +126,54 @@ public abstract unsafe class AddonMasterBase<T> : IAddonMasterBase where T : unm
         return false;
     }
 
+    /// <summary>
+    /// 建立一個以本 addon 為 <c>Listener</c>、以 <c>AtkStage</c> 的事件目標為 <c>Target</c> 的事件。
+    /// </summary>
+    /// <remarks>
+    /// 取不到 <c>AtkStage</c> 時<b>擲例外而不是回一個壞掉的事件</b>,理由見 <see cref="TryCreateAtkEvent"/>。
+    /// 簽章刻意維持不變(艦隊內有 repo 外的子類別在呼叫它),想要安靜跳過的呼叫端改用
+    /// <see cref="TryCreateAtkEvent"/>。
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">取不到 <c>AtkStage</c>。</exception>
     protected AtkEvent CreateAtkEvent(byte flags = 0)
     {
-        var ret = stackalloc AtkEvent[]
+        if(!TryCreateAtkEvent(out var atkEvent, flags))
+            throw new InvalidOperationException("AtkStage is not available; refusing to build an AtkEvent with an invalid target.");
+        return atkEvent;
+    }
+
+    /// <summary>
+    /// <see cref="CreateAtkEvent"/> 的 fail-closed 版本:取不到 <c>AtkStage</c> 時回
+    /// <see langword="false"/>,呼叫端應直接放棄送出事件。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 原本這裡寫的是 <c>Target = &amp;AtkStage.Instance()-&gt;AtkEventTarget</c>。
+    /// 取欄位位址<b>不會解參考</b>,所以 <c>AtkStage.Instance()</c> 回 null 時這一行不會當場崩 ——
+    /// 它算出的是 <c>null + offsetof(AtkEventTarget)</c>,一個長得像小整數的假指標,
+    /// 然後被原封不動交給遊戲的 <c>ReceiveEvent</c>。崩潰發生在遊戲碼解參考那個假指標的時候,
+    /// 是 AccessViolation;而 AVE 在 .NET Core 是 corrupted-state exception,
+    /// <c>try</c>/<c>catch</c> 攔不到。
+    /// ⇒ <b>失敗必須在送出事件之前攔下,不能靠例外處理善後。</b>
+    /// <br/>
+    /// <c>AtkStage.Instance()</c> 宣告成 <c>[StaticAddress(..., isPointer: true)]</c>,
+    /// 回的是靜態位址裡存放的指標值,產生器只在<b>特徵碼失配</b>時擲例外,對回傳值不判空。
+    /// 這與同檔 <see cref="HasFocus"/> 是同一組呼叫點 —— 那裡已經判空,這裡是漏補的姊妹呼叫點。
+    /// </remarks>
+    protected bool TryCreateAtkEvent(out AtkEvent atkEvent, byte flags = 0)
+    {
+        atkEvent = default;
+        var stage = AtkStage.Instance();
+        if(stage == null) return false;
+        atkEvent = new AtkEvent()
         {
-            new()
+            Listener = (AtkEventListener*)Base,
+            Target = &stage->AtkEventTarget,
+            State = new()
             {
-                Listener = (AtkEventListener*)Base,
-                Target = &AtkStage.Instance()->AtkEventTarget,
-                State = new()
-                {
-                    StateFlags = (AtkEventStateFlags)flags
-                }
+                StateFlags = (AtkEventStateFlags)flags
             }
         };
-        return *ret;
+        return true;
     }
 
     protected AtkEventDataBuilder CreateAtkEventData()
