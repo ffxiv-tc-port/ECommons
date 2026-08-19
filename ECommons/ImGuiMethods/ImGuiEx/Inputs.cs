@@ -1,4 +1,5 @@
 ﻿using Dalamud.Interface.Utility;
+using ECommons.LanguageHelpers;
 using ECommons.Throttlers;
 using Dalamud.Bindings.ImGui;
 using System;
@@ -303,11 +304,11 @@ public static partial class ImGuiEx
                 }
                 if(ImGui.BeginPopup(id))
                 {
-                    if(ImGui.Selectable("Delete##ECommonsDeleItem"))
+                    if(ImGui.Selectable("Delete".Loc() + "##ECommonsDeleItem"))
                     {
                         rem = i;
                     }
-                    if(ImGui.Selectable("Clear (hold shift+ctrl)##ECommonsDeleItem")
+                    if(ImGui.Selectable("Clear (hold shift+ctrl)".Loc() + "##ECommonsDeleItem")
                         && ImGui.GetIO().KeyShift && ImGui.GetIO().KeyCtrl)
                     {
                         rem = -2;

@@ -1,5 +1,6 @@
 using Dalamud.Interface.Colors;
 using ECommons.CircularBuffers;
+using ECommons.LanguageHelpers;
 using ECommons.ImGuiMethods;
 using ECommons.Reflection;
 using Dalamud.Bindings.ImGui;
@@ -129,7 +130,7 @@ public class InternalLog
 #pragma warning restore
         }
         ImGui.SameLine();
-        if(ImGui.Button("Clear"))
+        if(ImGui.Button("Clear".Loc() + "##ECommonsInternalLogClear"))
         {
             Messages.Clear();
         }
