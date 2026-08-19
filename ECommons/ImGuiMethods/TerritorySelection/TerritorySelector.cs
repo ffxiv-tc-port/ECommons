@@ -3,6 +3,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Utility;
 using ECommons.DalamudServices;
 using ECommons.ExcelServices;
+using ECommons.LanguageHelpers;
 using ECommons.GameHelpers;
 using ECommons.Schedulers;
 using Dalamud.Bindings.ImGui;
@@ -160,11 +161,11 @@ public unsafe class TerritorySelector : Window
                 if(ImGui.BeginTabItem(x.Key.ToString(), SelectedCategory == x.Key ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
                 {
                     ImGui.SetNextItemWidth(200f);
-                    ImGui.InputTextWithHint($"##search", "Filter...", ref Filter, 50);
+                    ImGui.InputTextWithHint($"##search", "Filter...".Loc(), ref Filter, 50);
                     ImGui.SameLine();
-                    ImGui.Checkbox("Only selected", ref OnlySelected);
+                    ImGui.Checkbox("Only selected".Loc() + "##ECTSOnlySelected", ref OnlySelected);
                     ImGui.SameLine();
-                    ImGui.Checkbox("Show unnamed", ref ShowUnnamed);
+                    ImGui.Checkbox("Show unnamed".Loc() + "##ECTSShowUnnamed", ref ShowUnnamed);
                     if(Player.Available)
                     {
                         ImGui.SameLine();
