@@ -27,7 +27,19 @@ public partial class AddonMaster
             set => Callback.Fire(Base, true, 3, value);
         }
 
-        public string ItemName => Addon->GetTextNodeById(7)->NodeText.GetText();
+        /// <remarks>
+        /// 🔴 節點取得器合法回 null,而 <c>->NodeText</c> 是內嵌值(偏移 0xC0):
+        /// 對 null 節點取它就是解參考 null+0xC0 = AccessViolation,而 AVE 是
+        /// corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。取不到時回空字串。
+        /// </remarks>
+        public string ItemName
+        {
+            get
+            {
+                var node = Addon->GetTextNodeById(7);
+                return node == null ? string.Empty : node->NodeText.GetText();
+            }
+        }
 
         public override string AddonDescription { get; } = "Retainer item sell window";
 
