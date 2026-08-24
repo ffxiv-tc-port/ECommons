@@ -30,18 +30,18 @@ namespace ECommons.GameHelpers;
 public static unsafe class Player
 {
     public static readonly Number MaxLevel = 100;
-    public static IPlayerCharacter Object => Svc.ClientState.LocalPlayer;
-    public static bool Available => Svc.ClientState.LocalPlayer != null;
+    public static IPlayerCharacter Object => Svc.Objects.LocalPlayer;
+    public static bool Available => Svc.Objects.LocalPlayer != null;
     public static bool AvailableThreadSafe => GameObjectManager.Instance()->Objects.IndexSorted[0].Value != null;
     public static bool Interactable => Available && Object.IsTargetable;
     public static bool IsBusy => GenericHelpers.IsOccupied() || Object.IsCasting || IsMoving || IsAnimationLocked || Svc.Condition[ConditionFlag.InCombat];
-    public static ulong CID => Svc.ClientState.LocalContentId;
-    public static StatusList Status => Svc.ClientState.LocalPlayer?.StatusList;
-    public static string Name => Svc.ClientState.LocalPlayer?.Name.ToString();
-    public static string NameWithWorld => GetNameWithWorld(Svc.ClientState.LocalPlayer);
+    public static ulong CID => Svc.PlayerState.ContentId;
+    public static StatusList Status => Svc.Objects.LocalPlayer?.StatusList;
+    public static string Name => Svc.Objects.LocalPlayer?.Name.ToString();
+    public static string NameWithWorld => GetNameWithWorld(Svc.Objects.LocalPlayer);
     public static string GetNameWithWorld(this IPlayerCharacter pc) => pc == null ? null : (pc.Name.ToString() + "@" + pc.HomeWorld.ValueNullable?.Name.ToString());
 
-    public static int Level => Svc.ClientState.LocalPlayer?.Level ?? 0;
+    public static int Level => Svc.Objects.LocalPlayer?.Level ?? 0;
     public static bool IsLevelSynced => PlayerState.Instance()->IsLevelSynced;
     public static int SyncedLevel => PlayerState.Instance()->SyncedLevel;
     public static int UnsyncedLevel => GetUnsyncedLevel(GetJob(Object));
@@ -79,16 +79,16 @@ public static unsafe class Player
         return PlayerState.Instance()->ClassJobLevels[expArrayIndex];
     }
 
-    public static bool IsInHomeWorld => !Player.Available ? false : Svc.ClientState.LocalPlayer.HomeWorld.RowId == Svc.ClientState.LocalPlayer.CurrentWorld.RowId;
-    public static bool IsInHomeDC => !Player.Available ? false : Svc.ClientState.LocalPlayer.CurrentWorld.Value.DataCenter.RowId == Svc.ClientState.LocalPlayer.HomeWorld.Value.DataCenter.RowId;
-    public static string HomeWorld => Svc.ClientState.LocalPlayer?.HomeWorld.Value.Name.ToString();
-    public static string CurrentWorld => Svc.ClientState.LocalPlayer?.CurrentWorld.Value.Name.ToString();
+    public static bool IsInHomeWorld => !Player.Available ? false : Svc.Objects.LocalPlayer.HomeWorld.RowId == Svc.Objects.LocalPlayer.CurrentWorld.RowId;
+    public static bool IsInHomeDC => !Player.Available ? false : Svc.Objects.LocalPlayer.CurrentWorld.Value.DataCenter.RowId == Svc.Objects.LocalPlayer.HomeWorld.Value.DataCenter.RowId;
+    public static string HomeWorld => Svc.Objects.LocalPlayer?.HomeWorld.Value.Name.ToString();
+    public static string CurrentWorld => Svc.Objects.LocalPlayer?.CurrentWorld.Value.Name.ToString();
     public static string HomeDataCenter => Svc.Data.GetExcelSheet<World>().GetRowOrDefault(HomeWorldId)?.DataCenter.ValueNullable?.Name.ToString();
     public static string CurrentDataCenter => Svc.Data.GetExcelSheet<World>().GetRowOrDefault(CurrentWorldId)?.DataCenter.ValueNullable?.Name.ToString();
 
-    public static Character* Character => (Character*)Svc.ClientState.LocalPlayer.Address;
-    public static BattleChara* BattleChara => (BattleChara*)Svc.ClientState.LocalPlayer.Address;
-    public static GameObject* GameObject => (GameObject*)Svc.ClientState.LocalPlayer.Address;
+    public static Character* Character => (Character*)Svc.Objects.LocalPlayer.Address;
+    public static BattleChara* BattleChara => (BattleChara*)Svc.Objects.LocalPlayer.Address;
+    public static GameObject* GameObject => (GameObject*)Svc.Objects.LocalPlayer.Address;
 
     public static uint Territory => Svc.ClientState.TerritoryType;
     public static TerritoryIntendedUseEnum TerritoryIntendedUse => (TerritoryIntendedUseEnum)(Svc.Data.GetExcelSheet<TerritoryType>().GetRowOrDefault(Territory)?.TerritoryIntendedUse.ValueNullable?.RowId ?? default);
@@ -140,7 +140,7 @@ public static unsafe class Player
     }
     public static bool IsInPvP => GameMain.IsInPvPInstance();
 
-    public static Job Job => GetJob(Svc.ClientState.LocalPlayer);
+    public static Job Job => GetJob(Svc.Objects.LocalPlayer);
     public static GrandCompany GrandCompany => (GrandCompany)PlayerState.Instance()->GrandCompany;
     public static Job GetJob(this IPlayerCharacter pc) => (Job)(pc?.ClassJob.RowId ?? 0);
 
@@ -212,7 +212,7 @@ public static unsafe class Player
     public static float DistanceTo(IGameObject other) => Vector3.Distance(Position, other.Position);
 
     [Obsolete("Use IsJumping")]
-    public static unsafe bool Dismounting => **(byte**)(Svc.ClientState.LocalPlayer.Address + 1400) == 1;
+    public static unsafe bool Dismounting => **(byte**)(Svc.Objects.LocalPlayer.Address + 1400) == 1;
     [Obsolete("Use IsJumping")]
     public static bool Jumping => Svc.Condition[ConditionFlag.Jumping] || Svc.Condition[ConditionFlag.Jumping61];
 

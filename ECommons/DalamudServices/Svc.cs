@@ -56,6 +56,18 @@ public class Svc
     [PluginService] public static INotificationManager NotificationManager { get; private set; }
     [PluginService] public static IContextMenu ContextMenu { get; private set; }
     [PluginService] public static IMarketBoard MarketBoard { get; private set; }
+    /// <remarks>
+    /// API13 把 <c>IClientState.LocalContentId</c> 標為過時,替代品就是這個服務的
+    /// <c>ContentId</c>。Dalamud 端 <c>ClientState.LocalContentId</c> 本身即是
+    /// <c>=&gt; this.playerState.ContentId</c> 的純轉發(<c>IsLoaded</c> 判斷在
+    /// <c>PlayerState.ContentId</c> 內部),所以改由這裡取值不會改變行為。
+    /// <para>
+    /// 註冊屬性(<c>[PluginInterface]</c> / <c>[ServiceManager.EarlyLoadedService]</c> /
+    /// <c>[ResolveVia&lt;IPlayerState&gt;]</c>)與 <see cref="Objects"/> 的 <c>ObjectTable</c>
+    /// 完全相同,同一次 <c>pi.Create&lt;Svc&gt;()</c> 就解析得到。
+    /// </para>
+    /// </remarks>
+    [PluginService] public static IPlayerState PlayerState { get; private set; }
 
     internal static bool IsInitialized = false;
     public static void Init(IDalamudPluginInterface pi)
