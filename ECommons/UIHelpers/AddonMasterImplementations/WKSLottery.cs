@@ -1,6 +1,4 @@
-﻿using Dalamud.Game.Text.SeStringHandling;
-using Dalamud.Memory;
-using ECommons.Automation;
+﻿using ECommons.Automation;
 using ECommons.DalamudServices;
 using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -27,13 +25,21 @@ public partial class AddonMaster
                 var ret = new List<WheelItems>();
                 for(var i = 0; i < 7; i++)
                 {
-                    var itemId = Addon->AtkValues[89 + i * 7].UInt;
+                    var itemId = GenericHelpers.GetAtkValueUInt(Addon, 89 + i * 7);
                     if(itemId == 0)
                         continue;
 
-                    var itemAmount = Addon->AtkValues[92 + i * 7].UInt;
-                    SeString itemName = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[91 + i * 7].String.Value).GetText();
-                    var itemNameText = itemName.ToString();
+                    var itemAmount = GenericHelpers.GetAtkValueUInt(Addon, 92 + i * 7);
+
+                    // 🔴 三重守衛(見 GenericHelpers.TryGetAtkValueSeString)。原寫法對 String.Value
+                    // 無檢查直接解參考:型別不符時讀到的是垃圾指標 = AccessViolationException,
+                    // 而 AVE 是 corrupted-state exception,try/catch 攔不到。
+                    // 讀不到名稱時整筆跳過:itemName 的欄位宣告是 required string,
+                    // 塞空字串等於交出一個消費端無法辨識的假獎品。
+                    if(!GenericHelpers.TryGetAtkValueSeString(Addon, 91 + i * 7, out var itemName))
+                        continue;
+
+                    var itemNameText = itemName.GetText();
 
                     var ItemList = new WheelItems()
                     {
@@ -54,13 +60,17 @@ public partial class AddonMaster
                 var ret = new List<WheelItems>();
                 for(var i = 0; i < 7; i++)
                 {
-                    var itemId = Addon->AtkValues[138 + i * 7].UInt;
+                    var itemId = GenericHelpers.GetAtkValueUInt(Addon, 138 + i * 7);
                     if(itemId == 0)
                         continue;
 
-                    var itemAmount = Addon->AtkValues[141 + i * 7].UInt;
-                    SeString itemName = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[140 + i * 7].String.Value).GetText();
-                    var itemNameText = itemName.ToString();
+                    var itemAmount = GenericHelpers.GetAtkValueUInt(Addon, 141 + i * 7);
+
+                    // 三重守衛,理由同 LeftWheelItems。
+                    if(!GenericHelpers.TryGetAtkValueSeString(Addon, 140 + i * 7, out var itemName))
+                        continue;
+
+                    var itemNameText = itemName.GetText();
 
                     var ItemList = new WheelItems()
                     {

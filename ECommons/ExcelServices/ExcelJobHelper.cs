@@ -1,4 +1,5 @@
 ﻿using ECommons.DalamudServices;
+using ECommons.Logging;
 using Lumina.Excel.Sheets;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -55,9 +56,50 @@ public static class ExcelJobHelper
     public static bool IsPhysicalRangedDps(this Job j) => j.IsRangedDps() && j.IsDow();
     public static bool IsMagicalRangedDps(this Job j) => j.IsRangedDps() && j.IsDom();
 
+    /// <summary>
+    /// 取得職業的 <c>ClassJob</c> 列。查不到時回<b>第 0 列(冒險者/ADV)</b>而不是擲例外。
+    /// 要區分「真的是冒險者」與「查不到」請改用 <see cref="GetDataOrDefault"/>。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <c>GetRow</c> 對不存在的列<b>擲例外</b>不回 null。這個函式是本檔十幾個
+    /// <c>IsTank</c>/<c>IsHealer</c>/<c>IsDol</c>… 的共同底層,而那些多半跑在 ImGui 繪製迴圈或
+    /// LINQ 排序鍵裡 —— 擲一次例外就是整個視窗不畫,而且 <see cref="Job"/> 是可以從任意 uint
+    /// 轉型過來的(遊戲新增職業而列舉還沒補時就會落在表外)。
+    /// <br/><br/>
+    /// 📌 退路選第 0 列而不是 <c>default(ClassJob)</c>:Lumina 的列結構是<b>對資料頁的參照</b>,
+    /// <c>default</c> 的頁是 null,讀任何欄位都會 NullReferenceException —— 那只是把例外從這裡
+    /// 搬到呼叫端。第 0 列是「冒險者」,<c>Role == 0</c>、各職業旗標全 false,
+    /// 讓 <c>IsCombat</c>/<c>IsTank</c> 這些述詞得到「都不是」這個保守答案。
+    /// (2026-08-06 離線確認台服 7.20 的 ClassJob 表有 46 列、含第 0 列。)
+    /// </remarks>
     public static ClassJob GetData(this Job j)
     {
-        return Svc.Data.GetExcelSheet<ClassJob>().GetRow((uint)j);
+        var row = GetDataOrDefault(j);
+        if(row != null) return row.Value;
+
+        LogUnknownJobOnce((uint)j);
+        // 第 0 列理論上必定存在;真的連它都沒有就只剩 default,行為與加固前等價(呼叫端會拿到例外)。
+        return Svc.Data.GetExcelSheet<ClassJob>().GetRowOrDefault(0) ?? default;
+    }
+
+    /// <summary>
+    /// 同 <see cref="GetData"/>,但查不到時回 <see langword="null"/>,讓呼叫端自己決定怎麼處理未知職業。
+    /// </summary>
+    public static ClassJob? GetDataOrDefault(this Job j) => Svc.Data.GetExcelSheet<ClassJob>().GetRowOrDefault((uint)j);
+
+    private static readonly HashSet<uint> ReportedUnknownJobs = [];
+
+    /// <summary>
+    /// 同一個未知職業 id 只記一次 —— 呼叫端多半在每幀迴圈裡,不設閘門會把 log 灌爆。
+    /// 用 <c>Warning</c> 等級是為了讓跑 LogLevel 2 的使用者看得到(這是要請人回報的診斷)。
+    /// </summary>
+    private static void LogUnknownJobOnce(uint id)
+    {
+        lock(ReportedUnknownJobs)
+        {
+            if(!ReportedUnknownJobs.Add(id)) return;
+        }
+        PluginLog.Warning($"[ECommons] ClassJob 表裡沒有第 {id} 列,{nameof(GetData)} 退回第 0 列(冒險者)。職業判斷會全部回 false。");
     }
 
     public static Job GetJob(this ClassJob cj)

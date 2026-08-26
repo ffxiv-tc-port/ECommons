@@ -34,6 +34,11 @@ public static class Localization
                 for(var i = 0; i < list.Length; i++)
                 {
                     var x = list[i].Replace("\\n", "\n");
+                    // 🔴 空行/純空白行直接跳過，不算「無效條目」。
+                    // Split 對「檔尾有換行」的檔必定多產生一個空字串元素，
+                    // 原寫法因此讓每個帶 Language*.ini 的外掛開場固定印一則 Invalid entry，
+                    // 行號恆等於檔案行數 —— 那是全艦隊常態雜訊，曾把崩潰鑑識帶往錯的方向。
+                    if(string.IsNullOrWhiteSpace(x)) continue;
                     var e = x.Split(Separator);
                     if(e.Length == 2)
                     {
@@ -45,7 +50,7 @@ public static class Localization
                     }
                     else
                     {
-                        PluginLog.Warning($"[Localization] Invalid entry {x} (line {i}) found in localization file {file}");
+                        PluginLog.Warning($"[Localization] Invalid entry {x} (line {i + 1}) found in localization file {file}");
                     }
                 }
                 PluginLog.Information($"[Localization] Loaded {CurrentLocalization.Count} entries");
@@ -80,12 +85,22 @@ public static class Localization
         return AvailableLanguages;
     }
 
+    // 這裡刻意用數字轉型而不是列舉成員名稱：上游 Dalamud 的 ClientLanguage 只有 0..3，
+    // 4 以上是各分支自己加的，寫成員名稱在對上游建置時會編不過。
+    // 我們這一支（TC fork）的 ClientLanguage 是：
+    //   0 Japanese / 1 English / 2 German / 3 French
+    //   4 ChineseSimplified / 5 ChineseTraditional / 6 Korean / 7 TraditionalChinese
+    // 🔴 台服（TC）實機回報的是 7，不是 4。原本只對應 4 的時候，台服會靜默落到 "English"，
+    //    連帶讓 Language*.ini 的查找也找錯檔名。4 保留不動（別的分支還在用）。
     public static string GameLanguageString => Svc.Data.Language switch
     {
         ClientLanguage.Japanese => "Japanese",
         ClientLanguage.French => "French",
         ClientLanguage.German => "German",
         (ClientLanguage)4 => "Chinese",
+        (ClientLanguage)5 => "ChineseTraditional",
+        (ClientLanguage)6 => "Korean",
+        (ClientLanguage)7 => "ChineseTraditional",
         _ => "English"
     };
 

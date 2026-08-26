@@ -1,5 +1,4 @@
-﻿using Dalamud.Memory;
-using ECommons.Automation;
+﻿using ECommons.Automation;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using System.Collections.Generic;
 using Callback = ECommons.Automation.Callback;
@@ -24,11 +23,17 @@ public partial class AddonMaster
                 var ret = new List<ClassSelector>();
                 for(var i = 0; i < 11; i++)
                 {
-                    var level = Addon->AtkValues[22 + i].UInt;
+                    var level = GenericHelpers.GetAtkValueUInt(Addon, 22 + i);
                     if(level == 0)
                         continue;
 
-                    var ClassName = MemoryHelper.ReadSeStringNullTerminated((nint)Addon->AtkValues[11 + i].String.Value).GetText();
+                    // 🔴 三重守衛,見 GenericHelpers.TryGetAtkValueSeString:原寫法對 String.Value
+                    // 無檢查直接解參考,型別不符時讀到的是垃圾指標 = AccessViolationException(攔不到)。
+                    // 名稱讀不出來就整筆跳過 —— 回空字串會讓消費端拿到一個無法選取的假項目。
+                    if(!GenericHelpers.TryGetAtkValueSeString(Addon, 11 + i, out var className))
+                        continue;
+
+                    var ClassName = className.GetText();
                     var ClassList = new ClassSelector(this, i)
                     {
                         ClassName = ClassName,

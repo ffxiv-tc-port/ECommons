@@ -1,5 +1,6 @@
 ﻿using Dalamud.Hooking;
 using ECommons.DalamudServices;
+using ECommons.EzHookManager;
 using ECommons.Hooks.ActionEffectTypes;
 using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
@@ -15,6 +16,13 @@ public static unsafe class ActionEffect
 
     public delegate void ProcessActionEffect(uint sourceId, Character* sourceCharacter, Vector3* pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail);
     internal static Hook<ProcessActionEffect> ProcessActionEffectHook = null;
+    /// <summary>
+    /// Delegate pointing at the original function address (no trampoline involved).
+    /// <see cref="Dispose"/> sets the hook field above back to null; by that point Disable() and
+    /// Dispose() have already run and the original bytes are restored, so calling this delegate
+    /// can not recurse back into the detour.
+    /// </summary>
+    private static ProcessActionEffect OriginalDelegate = null;
 
     public delegate void ActionEffectCallback(ActionEffectSet set);
 
@@ -48,6 +56,7 @@ public static unsafe class ActionEffect
         {
             if(Svc.SigScanner.TryScanText(Sig, out var ptr))
             {
+                OriginalDelegate ??= EzDelegate.Get<ProcessActionEffect>(ptr);
                 ProcessActionEffectHook = Svc.Hook.HookFromAddress<ProcessActionEffect>(ptr, ProcessActionEffectDetour);
                 Enable();
                 PluginLog.Information($"Requested Action Effect hook and successfully initialized");
@@ -78,9 +87,11 @@ public static unsafe class ActionEffect
 
     public static void Disable()
     {
-        if(ProcessActionEffectHook != null && !ProcessActionEffectHook.IsDisposed && ProcessActionEffectHook.IsEnabled)
+        // Snapshot once: Dispose() can null the field between two reads.
+        var hook = ProcessActionEffectHook;
+        if(hook != null && !hook.IsDisposed && hook.IsEnabled)
         {
-            ProcessActionEffectHook.Disable();
+            hook.Disable();
         }
     }
 
@@ -100,6 +111,10 @@ public static unsafe class ActionEffect
 
     internal static void ProcessActionEffectDetour(uint sourceID, Character* sourceCharacter, Vector3* pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
     {
+        // Dispose() sets ProcessActionEffectHook back to null while this detour may still be
+        // executing (in-flight call, or a subscriber tearing the plugin down from the callback).
+        // Snapshot it once into a local and only use the local afterwards - never read the field twice.
+        var hook = ProcessActionEffectHook;
         try
         {
             if(doLogging) PluginLog.Verbose($"--- source actor: {sourceCharacter->GameObject.EntityId}, action id {effectHeader->ActionID}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
@@ -125,6 +140,12 @@ public static unsafe class ActionEffect
             PluginLog.Error($"An error has occurred in Action Effect hook.\n{e}");
         }
 
-        ProcessActionEffectHook.Original(sourceID, sourceCharacter, pos, effectHeader, effectArray, effectTail);
+        var original = hook?.OriginalDisposeSafe ?? OriginalDelegate;
+        if(original == null)
+        {
+            PluginLog.Information($"Action Effect hook was disposed mid-call and no original delegate is available; skipping the original call for this invocation.");
+            return;
+        }
+        original(sourceID, sourceCharacter, pos, effectHeader, effectArray, effectTail);
     }
 }

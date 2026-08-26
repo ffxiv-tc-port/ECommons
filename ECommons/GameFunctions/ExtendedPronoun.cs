@@ -106,7 +106,23 @@ public static unsafe class ExtendedPronoun
             {
                 var cand = ResolveInternal(stripped);
                 if(cand != null) return cand;
-                return FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance()->GetUIModule()->GetPronounModule()->ResolvePlaceholder($"{pronoun}", 0, 0);
+                // 🔴 這條鏈與 PlayerFunctions.TryGetPlaceholder 是同一條、同一個缺陷 —— 那邊已在前一輪補上,
+                //    本檔是當時漏掃到的姊妹呼叫點。三層每一層都可能是 null:
+                //    ① Framework.Instance() 是 [StaticAddress(..., isPointer: true)],產生器只在特徵碼失配時
+                //       擲例外,對回傳值不判空 —— 登入前/登出後/關閉中真的會是 null。
+                //    ② GetUIModule() 是 [MemberFunction] 原生呼叫,對 null 的 this 呼叫會直接在遊戲碼裡解參考。
+                //    ③ GetPronounModule() 是 [VirtualFunction(10)],對 null 取 vtable 就是解參考 null。
+                // ⚠️ 外面那圈 catch(Exception) 攔不到這個:AccessViolation 在 .NET Core 是 corrupted-state
+                //    exception,try/catch 對它無效 —— 有 try 區塊不代表這裡受到保護。
+                // 取不到時回 null(＝「這個代名詞解不出物件」),與本函式其餘三個失敗出口的語意完全一致;
+                // 三層都拿得到時的行為一字未改。
+                var framework = FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance();
+                if(framework == null) return null;
+                var uiModule = framework->GetUIModule();
+                if(uiModule == null) return null;
+                var pronounModule = uiModule->GetPronounModule();
+                if(pronounModule == null) return null;
+                return pronounModule->ResolvePlaceholder($"{pronoun}", 0, 0);
             }
         }
         catch(Exception e)
@@ -191,8 +207,8 @@ public static unsafe class ExtendedPronoun
     {
         if(modifier == "target")
         {
-            return (GameObject*)Svc.ClientState.LocalPlayer?.TargetObject?.Address;
+            return (GameObject*)Svc.Objects.LocalPlayer?.TargetObject?.Address;
         }
-        return (GameObject*)Svc.ClientState.LocalPlayer?.Address;
+        return (GameObject*)Svc.Objects.LocalPlayer?.Address;
     }
 }

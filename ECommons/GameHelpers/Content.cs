@@ -1,4 +1,4 @@
-using ECommons.DalamudServices;
+﻿using ECommons.DalamudServices;
 using ECommons.ExcelServices;
 using Lumina.Data;
 using Lumina.Excel.Sheets;
@@ -176,21 +176,8 @@ public static class Content
     /// <summary>
     ///     Whether the difficulty was found in the <see cref="ContentName" />.
     /// </summary>
-    private static bool ContentDifficultyFromNameResolved
-    {
-        get
-        {
-            if(ContentFinderConditionRow is null)
-                return false;
-
-            var contentName =
-                ContentFinderConditionRow.Value.Name.ToString().ToLower();
-
-            return contentName.Contains(" (hard") ||
-                   contentName.Contains(" (extreme") ||
-                   contentName.Contains(" (savage");
-        }
-    }
+    private static bool ContentDifficultyFromNameResolved =>
+        ContentDifficultyFromName is not null;
 
     /// <summary>
     ///     The title case difficulty of the content as found in the
@@ -201,13 +188,53 @@ public static class Content
     ///     <see cref="ContentDifficultyFromNameResolved">resolved</see> or when
     ///     <see cref="ContentFinderConditionRow" /> is null.
     /// </value>
-    public static string? ContentDifficultyFromName =>
-        ContentFinderConditionRow is null
-            ? null
-            : ContentDifficultyFromNameResolved
-                ? ContentFinderConditionRow?.Name.ToString().Split('(').Last()
-                    .TrimEnd(')').Trim()
-                : null;
+    /// <remarks>
+    ///     台服(TC)注意:我們的 Dalamud fork 的 Lumina 會把指定語言的 Excel
+    ///     請求靜默改成 client 語言,因此本類以 <c>Language.English</c> 取得的表
+    ///     實際上是繁中資料,英文括號後綴(" (savage" 等)永遠比對不到,
+    ///     需另以繁中命名規則判定(見 <see cref="ContentDifficultyFromNameTC" />)。
+    /// </remarks>
+    public static string? ContentDifficultyFromName
+    {
+        get
+        {
+            if(ContentFinderConditionRow is null)
+                return null;
+
+            var contentName = ContentFinderConditionRow.Value.Name.ToString();
+            var lowered = contentName.ToLower();
+            if(lowered.Contains(" (hard") ||
+               lowered.Contains(" (extreme") ||
+               lowered.Contains(" (savage"))
+                return contentName.Split('(').Last().TrimEnd(')').Trim();
+
+            return ContentDifficultyFromNameTC(contentName);
+        }
+    }
+
+    /// <summary>
+    ///     台服 CFC 名稱的難度關鍵字判定,回傳與英文分支相同的難度 token。<br />
+    ///     零式=Savage(7.20 dump 實查:60 個零式 raid 全中、零誤中;舊零式
+    ///     HighEndDuty=false,無法數值判定);「極 」/「極王」前綴與
+    ///     「究極幻想/蒼天幻想/終極之戰」(吟遊詩人的敘事詩系列)=Extreme;
+    ///     「真 」前綴=Hard。<br />
+    ///     刻意不用 Contains("極"):會誤中「究極武器破壞作戰」(普通難度)與
+    ///     「極惡之人木枯」(單人任務戰鬥);也不用 Contains("幻想"):會誤中
+    ///     「迦巴勒幻想圖書館」等迷宮。台服困難迷宮無命名標記(如「騷亂坑道
+    ///     銅鈴銅山」),維持 Normal——與消費端的難度分組(Casual/SoftCore)等價。
+    /// </summary>
+    private static string? ContentDifficultyFromNameTC(string contentName)
+    {
+        if(contentName.Contains("零式"))
+            return "Savage";
+        if(contentName.StartsWith("極 ") || contentName.StartsWith("極王") ||
+           contentName.StartsWith("究極幻想") || contentName.StartsWith("蒼天幻想") ||
+           contentName == "終極之戰")
+            return "Extreme";
+        if(contentName.StartsWith("真 "))
+            return "Hard";
+        return null;
+    }
 
     /// <summary>
     ///     The Sheet row for the current <see cref="InstanceContent" />.
@@ -323,6 +350,17 @@ public static class Content
                 TerritoryIntendedUseEnum.Large_Scale_Savage_Raid =>
                 GameHelpers.ContentType.FieldRaid,
 
+            // 台服(TC)注意:這三個英文字面在台服比對不到(ContentName 是以 client 語言
+            // 讀出的 CFC/PlaceName),但**不需要補繁中**——7.20 EXD dump 實查後三個都是死碼:
+            //  * Delubrum Reginae 是 TerritoryType 936/937,TerritoryIntendedUse 52/53,
+            //    已被上面的 Large_Scale_Raid / Large_Scale_Savage_Raid 分支攔下,
+            //    這一行永遠輪不到(全表只有 936/937 用 52/53)。
+            //  * Castrum Lacus Litore(帝國湖岸堡攻城戰)與 The Dalriada(旗艦達爾里阿達號
+            //    攻略戰)沒有自己的 TerritoryType/CFC,它們是南方博茲雅戰線(920)與
+            //    扎杜諾爾高原(975)裡的 DynamicEvent(16 / 32),所以 ContentName 在裡面
+            //    仍然是所屬野外區域的名字——這兩個比對在**任何語言**都恆為 false。
+            // 真正還活著的只有 MapID 520~527(優雷卡豐水之地的兵武塔＝Baldesion Arsenal),
+            // 而那是數值判定,與語言無關。保留原樣以免影響其他語言客戶端。
             _ when
                 (ContentName?.Contains("Delubrum") ?? false) ||
                 (ContentName?.Contains("Lacus") ?? false) ||
@@ -388,6 +426,11 @@ public static class Content
             { ContentType.RowId: 29 } when ContentDifficultyFromName == "Savage" =>
                 GameHelpers.ContentDifficulty.FieldRaidsSavage,
 
+            // 台服(TC)注意:Contains("Minstrel") 在台服比對不到,但**不需要補繁中**——
+            // 台服的吟遊詩人敘事詩系列不是統一前綴,而是分散在「極 」前綴(極 神龍/極 月讀/
+            // 極 黑迪斯/極 佐狄亞克/極 海德林/極 尼德霍格/極 永恆女王…)與
+            // 「究極幻想」「蒼天幻想」「終極之戰」三個特例,這些全部已由
+            // ContentDifficultyFromNameTC 判成 "Extreme",左邊的條件就會成立。
             { ContentType.RowId: 4 } when
                 ContentDifficultyFromName == "Extreme" ||
                 (ContentName?.Contains("Minstrel") ?? false) =>

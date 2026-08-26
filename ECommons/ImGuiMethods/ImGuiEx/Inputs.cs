@@ -1,4 +1,5 @@
 ﻿using Dalamud.Interface.Utility;
+using ECommons.LanguageHelpers;
 using ECommons.Throttlers;
 using Dalamud.Bindings.ImGui;
 using System;
@@ -255,11 +256,11 @@ public static partial class ImGuiEx
         if(!InputListValuesString.ContainsKey(name)) InputListValuesString[name] = new("");
         InputList(name, list, overrideValues, delegate
         {
-            var buttonSize = ImGuiHelpers.GetButtonSize("Add");
+            var buttonSize = ImGuiHelpers.GetButtonSize("Add".Loc());
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - buttonSize.X - ImGui.GetStyle().ItemSpacing.X);
             ImGui.InputText($"##{name.Replace("#", "_")}", ref InputListValuesString[name].Value, 100);
             ImGui.SameLine();
-            if(ImGui.Button("Add"))
+            if(ImGui.Button("Add".Loc()))
             {
                 list.Add(InputListValuesString[name].Value);
                 InputListValuesString[name].Value = "";
@@ -273,11 +274,11 @@ public static partial class ImGuiEx
         if(!InputListValuesUint.ContainsKey(name)) InputListValuesUint[name] = new(0);
         InputList(name, list, overrideValues, delegate
         {
-            var buttonSize = ImGuiHelpers.GetButtonSize("Add");
+            var buttonSize = ImGuiHelpers.GetButtonSize("Add".Loc());
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - buttonSize.X - ImGui.GetStyle().ItemSpacing.X);
             ImGuiEx.InputUint($"##{name.Replace("#", "_")}", ref InputListValuesUint[name].Value);
             ImGui.SameLine();
-            if(ImGui.Button("Add"))
+            if(ImGui.Button("Add".Loc()))
             {
                 list.Add(InputListValuesUint[name].Value);
                 InputListValuesUint[name].Value = 0;
@@ -303,11 +304,11 @@ public static partial class ImGuiEx
                 }
                 if(ImGui.BeginPopup(id))
                 {
-                    if(ImGui.Selectable("Delete##ECommonsDeleItem"))
+                    if(ImGui.Selectable("Delete".Loc() + "##ECommonsDeleItem"))
                     {
                         rem = i;
                     }
-                    if(ImGui.Selectable("Clear (hold shift+ctrl)##ECommonsDeleItem")
+                    if(ImGui.Selectable("Clear (hold shift+ctrl)".Loc() + "##ECommonsDeleItem")
                         && ImGui.GetIO().KeyShift && ImGui.GetIO().KeyCtrl)
                     {
                         rem = -2;

@@ -60,11 +60,22 @@ public unsafe class AutoCutsceneSkipper
         CutsceneHandleInputHook?.Dispose();
     }
 
+    /// <remarks>
+    /// 🔴 這個 detour 會<b>暫時改寫遊戲自身的機器碼</b>(把條件跳轉 <c>0x75</c> 換成無條件跳轉
+    /// <c>0xEB</c>),呼叫完原函式再寫回去。所以「寫回去」這一步<b>必須</b>是無論如何都會執行的:
+    /// <list type="bullet">
+    /// <item>還原若沒跑到,<c>0xEB</c> 就<b>永久</b>留在遊戲碼上 —— 此後每一段過場都被無條件跳過,
+    /// 而且沒有任何錯誤徵兆、log 也不會留痕跡,直到重開遊戲為止。</item>
+    /// <item>原寫法把還原放在 try 區塊的<b>最後一行</b>:<c>Original</c> 一擲例外就跳去 catch,
+    /// 還原整行被跳過。</item>
+    /// </list>
+    /// ⚠️ 這裡<b>只</b>保證還原會執行,patch 的語意(改哪個位址、寫哪個位元組)完全沒動。
+    /// </remarks>
     internal static byte CutsceneHandleInputDetour(nint a1, float a2)
     {
         if(!Svc.Condition[ConditionFlag.OccupiedInCutSceneEvent])
         {
-            return CutsceneHandleInputHook.Original(a1, a2);
+            return CutsceneHandleInputHook.OriginalDisposeSafe(a1, a2);
         }
         var called = false;
         byte ret = 0;
@@ -76,9 +87,21 @@ public unsafe class AutoCutsceneSkipper
                 if(skippable)
                 {
                     SafeMemory.WriteBytes(ConditionAddr, [0xEB]);
-                    ret = CutsceneHandleInputHook.Original(a1, a2);
-                    called = true;
-                    SafeMemory.WriteBytes(ConditionAddr, [0x75]);
+                    try
+                    {
+                        // 🔴 called 必須在呼叫「之前」就設起來。原本設在 Original 回傳之後,
+                        // 於是 Original 一擲例外 called 就停在 false,底下的補呼叫會對
+                        // 同一幀的同一份輸入「再跑一次」遊戲的過場輸入處理 —— 而且那一次
+                        // 在 try 之外,再擲一次就直接穿出 detour 進原生層。
+                        // 語意上 called 要表達的是「Original 已經被呼叫過(不管結果如何)」。
+                        called = true;
+                        ret = CutsceneHandleInputHook.OriginalDisposeSafe(a1, a2);
+                    }
+                    finally
+                    {
+                        // 🔴 還原一定要在 finally,理由見上面的 remarks。
+                        SafeMemory.WriteBytes(ConditionAddr, [0x75]);
+                    }
                 }
             }
         }
@@ -88,7 +111,7 @@ public unsafe class AutoCutsceneSkipper
         }
         if(!called)
         {
-            ret = CutsceneHandleInputHook.Original(a1, a2);
+            ret = CutsceneHandleInputHook.OriginalDisposeSafe(a1, a2);
         }
         return ret;
     }

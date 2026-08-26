@@ -5,6 +5,7 @@ using ECommons.DalamudServices;
 using ECommons.GameFunctions;
 using ECommons.GameHelpers;
 using FFXIVClientStructs.FFXIV.Client.UI.Info;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -14,7 +15,18 @@ namespace ECommons.PartyFunctions;
 public static unsafe class UniversalParty
 {
     public static bool IsCrossWorldParty => Svc.Condition[ConditionFlag.ParticipatingInCrossWorldPartyOrAlliance];
-    public static bool IsAlliance => IsCrossWorldParty && InfoProxyCrossRealm.Instance()->IsInAllianceRaid;
+
+    // 🔴 IsCrossWorldParty 是 Dalamud 條件旗標,不是對 InfoProxyCrossRealm 指標的判空(假守衛):
+    // [InfoProxy] 產生器與 [Agent] 同構,Instance() 兩層合法回 null——旗標為真而 proxy 尚未建好的窗口仍會 AVE。
+    public static bool IsAlliance
+    {
+        get
+        {
+            if (!IsCrossWorldParty) return false;
+            var proxy = InfoProxyCrossRealm.Instance();
+            return proxy != null && proxy->IsInAllianceRaid;
+        }
+    }
 
     public static int Length => Members.Count;
     public static int LengthPlayback => MembersPlayback.Count;
@@ -38,11 +50,13 @@ public static unsafe class UniversalParty
             };
             if(IsCrossWorldParty)
             {
+                // 與 IsAlliance 同理:旗標為真而 proxy 尚未建好的窗口,Instance() 合法回 null。
                 var proxy = InfoProxyCrossRealm.Instance();
-                for(var i = 0; i < proxy->GroupCount; i++)
+                if(proxy == null) return span;
+                for(var i = 0; i < Math.Min((int)proxy->GroupCount, proxy->CrossRealmGroups.Length); i++)
                 {
                     var group = proxy->CrossRealmGroups[i];
-                    for(var c = 0; c < group.GroupMemberCount; c++)
+                    for(var c = 0; c < Math.Min((int)group.GroupMemberCount, group.GroupMembers.Length); c++)
                     {
                         var x = group.GroupMembers[c];
                         var name = GenericHelpers.Read(x.Name);

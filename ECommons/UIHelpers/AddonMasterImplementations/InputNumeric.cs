@@ -10,8 +10,12 @@ public partial class AddonMaster
         public InputNumeric(nint addon) : base(addon) { }
         public InputNumeric(void* addon) : base(addon) { }
 
-        public uint Min => Addon->AtkValues[2].UInt;
-        public uint Max => Addon->AtkValues[3].UInt;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。原本是無界讀,讀的是陣列外的記憶體。
+        /// </remarks>
+        public uint Min => GenericHelpers.GetAtkValueUInt(Addon, 2);
+        public uint Max => GenericHelpers.GetAtkValueUInt(Addon, 3);
 
         public AtkComponentButton* OkButton => Addon->GetComponentButtonById(4);
         public AtkComponentButton* CancelButton => Addon->GetComponentButtonById(5);

@@ -22,10 +22,23 @@ public partial class AddonMaster
         public void Postpone() => ClickButtonIfEnabled(PostponeButton);
         public void Dismiss() => ClickButtonIfEnabled(DismissButton);
 
-        public AtkComponentRadioButton* DisplayOrdersButton => Addon->GetComponentNodeById(31)->GetAsAtkComponentRadioButton();
-        public AtkComponentRadioButton* ChangeClassButton => Addon->GetComponentNodeById(32)->GetAsAtkComponentRadioButton();
-        public AtkComponentRadioButton* ConfirmChemistryButton => Addon->GetComponentNodeById(33)->GetAsAtkComponentRadioButton();
-        public AtkComponentRadioButton* OutfitButton => Addon->GetComponentNodeById(34)->GetAsAtkComponentRadioButton();
+        /// <remarks>
+        /// 🔴 <c>GetComponentNodeById</c> 找不到節點時<b>合法回 null</b>,而 <c>GetAsAtkComponent*()</c>
+        /// 是 <c>[MemberFunction]</c> —— 對 null 呼叫等於把 <c>this=0</c> 交給遊戲原生碼,
+        /// 當場 AccessViolation;AVE 是 corrupted-state exception,<c>try</c>/<c>catch</c> 攔不到。
+        /// 取不到就回 null;既有消費端 <c>ClickButtonIfEnabled</c>/<c>ClickCheckboxIfEnabled</c>
+        /// 開頭都已判空,所以取得到時行為完全照舊。
+        /// </remarks>
+        private AtkComponentRadioButton* RadioButtonById(uint id)
+        {
+            var node = Addon->GetComponentNodeById(id);
+            return node == null ? null : node->GetAsAtkComponentRadioButton();
+        }
+
+        public AtkComponentRadioButton* DisplayOrdersButton => RadioButtonById(31);
+        public AtkComponentRadioButton* ChangeClassButton => RadioButtonById(32);
+        public AtkComponentRadioButton* ConfirmChemistryButton => RadioButtonById(33);
+        public AtkComponentRadioButton* OutfitButton => RadioButtonById(34);
 
         public override string AddonDescription { get; } = "Squadron member profile window";
 

@@ -599,7 +599,10 @@ public static unsafe partial class ImGuiEx
                 ImGui.SameLine();
                 ImGuiEx.CollectionCheckbox("Melee jobs", Enum.GetValues<Job>().Where(x => x.IsMeleeDps() || x.IsTank()), selectedJobs);
             }
-            foreach(var cond in Enum.GetValues<Job>().Where(x => baseJobs || !x.IsUpgradeable()).OrderByDescending(x => Svc.Data.GetExcelSheet<ClassJob>().GetRow((uint)x).Role))
+            // 🔴 原本直接 GetRow((uint)x).Role —— GetRow 對不存在的列擲例外不回 null,
+            //    而這是排序鍵,一擲例外整個職業選擇器就不畫了。改走已加固的 GetData()
+            //    (查不到退回第 0 列,Role == 0,排在最後)。同一個表、同一個欄位,成功路徑不變。
+            foreach(var cond in Enum.GetValues<Job>().Where(x => baseJobs || !x.IsUpgradeable()).OrderByDescending(x => x.GetData().Role))
             {
                 if(cond == Job.ADV) continue;
                 if(jobDisplayFilter != null && !jobDisplayFilter(cond)) continue;

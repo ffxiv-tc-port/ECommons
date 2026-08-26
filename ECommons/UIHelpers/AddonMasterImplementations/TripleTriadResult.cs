@@ -11,8 +11,12 @@ public partial class AddonMaster
         /// <summary>
         /// 0 = won, 1 = lost
         /// </summary>
-        public int WonValue => Addon->AtkValues[2].Int;
-        public uint MGPReward => Addon->AtkValues[7].UInt;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。原本是無界讀,讀的是陣列外的記憶體。
+        /// </remarks>
+        public int WonValue => GenericHelpers.GetAtkValueInt(Addon, 2);
+        public uint MGPReward => GenericHelpers.GetAtkValueUInt(Addon, 7);
         public bool WonGame => WonValue == 0;
 
         public AtkComponentButton* RematchButton => Addon->GetComponentButtonById(21);
