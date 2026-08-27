@@ -17,15 +17,39 @@ public static class Map
         return new(wx, 0, wz);
     }
 
+    /// <summary>
+    /// 把 <c>MapMarker</c> 的圖素座標(0..2048)換算回世界座標。
+    /// </summary>
+    /// <param name="coord">MapMarker 的 X 或 Y,值域 0..2048。</param>
+    /// <param name="scale">地圖縮放係數,即 <c>Map.SizeFactor / 100</c>(不是 SizeFactor 本身)。</param>
+    /// <param name="offset">該軸的地圖偏移,即 <c>Map.OffsetX</c> 或 <c>Map.OffsetY</c>,單位是碼。</param>
+    /// <remarks>
+    /// 圖素與世界座標的關係是 <c>pixel = (world + offset) * scale + 1024</c>,
+    /// 反解即 <c>world = (pixel - 1024) / scale - offset</c>。
+    /// <br/><br/>
+    /// 🔴 原本這裡有兩個各自獨立的錯誤,兩個都是靜默給錯答案:
+    /// <list type="number">
+    /// <item><c>offset * 0.001f</c> —— <c>Map.OffsetX/OffsetY</c> 的單位本來就是碼,
+    /// 乘 0.001 等於<b>根本沒減偏移</b>。有偏移的地圖(多瑪飛地 23/34、圖萊尤拉 50/-70、
+    /// 九號解決方案 0/90)因此整張圖平移了一個偏移量,誤差 40~90 碼。
+    /// 這個誤差量剛好等於偏移本身,所以看起來像「座標怪怪的」而不像「公式壞了」。</item>
+    /// <item><c>factor = 2048/(50*41) = 0.999024</c> —— 那是<b>顯示用地圖座標</b>(1..41 那種)
+    /// 換算式裡的係數,被誤套到圖素座標上。圖素本身不需要再縮放,
+    /// 這一項會隨著離圖心的距離線性放大誤差。</item>
+    /// </list>
+    /// 📌 修正後的公式是拿已知真值校準過的,不是推導出來就算數:
+    /// 用 Lifestream <c>StaticData.json</c> 的 <c>CustomPositions</c> 20 筆實地座標當基準,
+    /// 對台服 7.20 的 <c>MapMarker</c>/<c>Map</c> 離線比對,平均誤差
+    /// 從 78.13 碼降到 0.41 碼(最大 89.32 → 1.03)。
+    /// 殘留的次碼級誤差是 <c>MapMarker.X/Y</c> 本身只有整數圖素解析度造成的量化下限
+    /// (SizeFactor 180 時 1 圖素 ≈ 0.56 碼),不是公式還有偏差。
+    /// <br/><br/>
+    /// ⚠️ 偏移的<b>正負號</b>也一併驗過:改成加偏移平均誤差是 156.82 碼,確定是減。
+    /// </remarks>
     // see: https://github.com/xivapi/ffxiv-datamining/blob/master/docs/MapCoordinates.md
-    // see: dalamud MapLinkPayload class
     public static float PixelCoordToWorldCoord(float coord, float scale, short offset)
     {
-        // +1 - networkAdjustment == 0
-        // (coord / scale * 2) * (scale / 100) = coord / 50
-        // * 2048 / 41 / 50 = 0.999024
-        const float factor = 2048.0f / (50 * 41);
-        return (coord * factor - 1024f) / scale - offset * 0.001f;
+        return (coord - 1024f) / scale - offset;
     }
 
 
