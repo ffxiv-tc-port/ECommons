@@ -35,7 +35,7 @@ public partial class AddonMaster
         public void SanctuaryGatheringLog() => ClickButtonIfEnabled(SanctuaryGatheringLogButton);
         public void ManageHideaway() => ClickButtonIfEnabled(ManageHideawayButton);
         public void MaterialAllocation() => ClickButtonIfEnabled(MaterialAllocationButton);
-        public void ManageMinions() => ClickButtonIfEnabled(ManageHideawayButton);
+        public void ManageMinions() => ClickButtonIfEnabled(ManageMinionButton);
         public void ManageFurnishing() => ClickButtonIfEnabled(ManageFurnishingButton);
         public void Guide() => ClickButtonIfEnabled(GuideButton);
     }
