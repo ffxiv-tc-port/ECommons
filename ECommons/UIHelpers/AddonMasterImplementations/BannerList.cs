@@ -14,7 +14,16 @@ public partial class AddonMaster
 
         public AtkComponentButton* EditButton => Addon->GetComponentButtonById(2);
         public AtkComponentButton* DisplayHelpButton => Addon->GetComponentButtonById(8);
-        public AtkComponentButton* UseAsInstantPortraitButton => Addon->GetComponentButtonById(34);
+        /// <remarks>
+        /// 原本寫 node 34 —— 那是按鈕左邊那條 <c>Text</c> 標籤，不是按鈕本身。
+        /// 非元件節點會讓 <c>GetComponentButtonById</c> 回 null，
+        /// <c>UseAsInstantPortrait()</c> 因此是**完全靜默的空操作**。
+        /// <c>ui/uld/BannerList.uld</c> 裡 node 33（Res 322x35）底下只有兩個子節點：
+        /// node 34＝Text 240x35 標籤、node 35＝Button 70x35，
+        /// 而 node 35 的元件貼圖來自 <c>ui/uld/ToggleButton.tex</c>，
+        /// 兩個 20x20 圖示分別是「肖像」與「帶標記的肖像」＝即時肖像切換。
+        /// </remarks>
+        public AtkComponentButton* UseAsInstantPortraitButton => Addon->GetComponentButtonById(35);
 
         /// <remarks>索引出界時回 0,見 <see cref="GenericHelpers.GetAtkValueInt"/>。</remarks>
         public int NumPortraits => GenericHelpers.GetAtkValueInt(Addon, 17);
