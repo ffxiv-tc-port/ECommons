@@ -49,6 +49,15 @@ public static unsafe partial class GenericHelpers
     /// <c>OwnerNode</c>, so reading the property directly raises an AccessViolationException.
     /// AVE is a corrupted-state exception: neither <c>try</c>/<c>catch</c> nor any exception-isolation wrapper
     /// can recover from it, so the pointers must be validated before the property is read.
+    /// <para>
+    /// There is an overload for every type that inherits <c>IsEnabled</c> from <c>AtkComponentButton</c>:
+    /// the base itself plus <c>AtkComponentCheckBox</c>, <c>AtkComponentHoldButton</c>,
+    /// <c>AtkComponentListItemRenderer</c>, <c>AtkComponentRadioButton</c> and <c>AtkComponentTab</c>
+    /// (the last one inherits transitively, through <c>AtkComponentRadioButton</c>).
+    /// Add an overload here if FFXIVClientStructs gains another one. A missing overload does not fail loudly:
+    /// it only pushes the caller into hand-writing the null check, which is how the <c>OwnerNode</c> check
+    /// gets forgotten in the first place.
+    /// </para>
     /// </remarks>
     /// <returns><see langword="false"/> - treat as not clickable - when any pointer on the path is null.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -69,6 +78,16 @@ public static unsafe partial class GenericHelpers
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsComponentEnabled(AtkComponentListItemRenderer* listItem)
         => listItem != null && listItem->OwnerNode != null && listItem->IsEnabled;
+
+    /// <inheritdoc cref="IsComponentEnabled(AtkComponentButton*)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentEnabled(AtkComponentHoldButton* holdButton)
+        => holdButton != null && holdButton->OwnerNode != null && holdButton->IsEnabled;
+
+    /// <inheritdoc cref="IsComponentEnabled(AtkComponentButton*)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsComponentEnabled(AtkComponentTab* tab)
+        => tab != null && tab->OwnerNode != null && tab->IsEnabled;
 
     /// <summary>
     /// Null-safe replacement for <c>component-&gt;AtkResNode-&gt;IsVisible()</c>.
