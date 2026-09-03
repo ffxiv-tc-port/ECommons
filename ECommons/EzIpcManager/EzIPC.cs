@@ -112,34 +112,44 @@ public static class EzIPC
                     var ipcName = attr.IPCName ?? reference.Name;
                     ipcName = ipcName.Replace("%m", reference.Name);
                     ipcName = ipcName.Replace("%p", Svc.PluginInterface.InternalName);
-                    var isNonGenericAction = reference.UnionType == typeof(Action);
-                    if(isNonGenericAction || reference.UnionType.GetGenericTypeDefinition().EqualsAny([.. FuncTypes, .. ActionTypes]))
+                    // Accepts any delegate type, not just Action<...>/Func<...>: a user-defined named
+                    // delegate (for example "public delegate bool Teleport(uint a, byte b);") is not a
+                    // generic type, so GetGenericTypeDefinition() used to throw on it and the subscriber
+                    // field was permanently left unassigned.
+                    if(TryGetDelegateSignature(reference.UnionType, out var delegateParams, out var delegateReturn))
                     {
                         var wrapper = attr.Wrapper == SafeWrapper.Inherit ? safeWrapper : attr.Wrapper;
                         if(!ECommonsMain.ReducedLogging)
                         {
                             PluginLog.Debug($"[EzIPC Subscriber] Attempting to assign IPC method to {instanceType.Name}.{reference.Name} with wrapper {wrapper}");
                         }
-                        var isAction = isNonGenericAction || reference.UnionType.GetGenericTypeDefinition().EqualsAny(ActionTypes);
-                        var genericArgsLen = reference.UnionType.GetGenericArguments().Length;
-                        var reg = FindIpcSubscriber(genericArgsLen + (isAction ? 1 : 0)) ?? throw new NullReferenceException("Could not retrieve GetIpcSubscriber. Did you called EzIPC.Init before ECommonsMain.Init or specified more than 9 arguments?");
-                        var genericArgs = reference.UnionType.IsGenericType ? reference.UnionType.GetGenericArguments() : [];
-                        var adjustedGenericArgs = isAction ? [.. genericArgs, attr.ActionLastGenericType] : genericArgs;
+                        var isAction = delegateReturn == typeof(void);
+                        // Dalamud call gates always take one extra generic argument for the return value;
+                        // for void delegates it is the dummy type from the attribute.
+                        var adjustedGenericArgs = (Type[])[.. delegateParams, isAction ? attr.ActionLastGenericType : delegateReturn];
+                        var reg = FindIpcSubscriber(adjustedGenericArgs.Length) ?? throw new NullReferenceException("Could not retrieve GetIpcSubscriber. Did you called EzIPC.Init before ECommonsMain.Init or specified more than 9 arguments?");
                         var genericMethod = reg.MakeGenericMethod(adjustedGenericArgs);
                         var name = attr.ApplyPrefix ? $"{prefix}.{ipcName}" : ipcName;
                         var callerInfo = genericMethod.Invoke(Svc.PluginInterface, [name])!;
-                        var invocationDelegate = ReflectionHelper.CreateDelegate(callerInfo.GetType().GetMethod(isAction ? "InvokeAction" : "InvokeFunc"), callerInfo);
+                        var invokeMethod = callerInfo.GetType().GetMethod(isAction ? "InvokeAction" : "InvokeFunc");
                         if(wrapper != SafeWrapper.None)
                         {
+                            // The safe wrapper stores the call gate invoker in an Action<...>/Func<...> field,
+                            // so that intermediate delegate must keep its generic shape.
+                            var invocationDelegate = ReflectionHelper.CreateDelegate(invokeMethod, callerInfo);
                             var safeWrapperObj = CreateSafeWrapper(wrapper, adjustedGenericArgs) ?? throw new NullReferenceException("Safe wrapper creation failed. Please report this exception to developer.");
                             var safeWrapperMethod = safeWrapperObj.GetType().GetMethod(isAction ? "InvokeAction" : "InvokeFunction", ReflectionHelper.AllFlags);
                             safeWrapperObj.SetFoP(isAction ? "Action" : "Function", invocationDelegate);
-                            reference.SetValue(instance, ReflectionHelper.CreateDelegate(safeWrapperMethod, safeWrapperObj));
+                            reference.SetValue(instance, ReflectionHelper.CreateDelegate(reference.UnionType, safeWrapperMethod, safeWrapperObj));
                         }
                         else
                         {
-                            reference.SetValue(instance, invocationDelegate);
+                            reference.SetValue(instance, ReflectionHelper.CreateDelegate(reference.UnionType, invokeMethod, callerInfo));
                         }
+                    }
+                    else
+                    {
+                        PluginLog.Error($"[EzIPC Subscriber] {instanceType.Name}.{reference.Name} is marked with {nameof(EzIPCAttribute)} but its type {reference.UnionType} is not a delegate type. Subscriber was not assigned.");
                     }
                 }
             }
@@ -207,19 +217,23 @@ public static class EzIPC
                     var ipcName = attr.IPCName ?? reference.Name;
                     ipcName = ipcName.Replace("%m", reference.Name);
                     ipcName = ipcName.Replace("%p", Svc.PluginInterface.InternalName);
-                    var isNonGenericAction = reference.UnionType == typeof(Action);
-                    if(isNonGenericAction || reference.UnionType.GetGenericTypeDefinition().EqualsAny(ActionTypes))
+                    // Accepts any delegate type with a void return, not just Action<...>: a user-defined
+                    // named delegate is not a generic type, so GetGenericTypeDefinition() used to throw on it.
+                    if(TryGetDelegateSignature(reference.UnionType, out var delegateParams, out var delegateReturn) && delegateReturn == typeof(void))
                     {
                         if(!ECommonsMain.ReducedLogging)
                         {
                             PluginLog.Debug($"[EzIPC Provider] Attempting to assign IPC event to {instanceType.Name}.{reference.Name}");
                         }
-                        var reg = FindIpcProvider(reference.UnionType.GetGenericArguments().Length + 1) ?? throw new NullReferenceException("Could not retrieve GetIpcProvider. Did you called EzIPC.Init before ECommonsMain.Init or specified more than 9 arguments?");
-                        var genericArgs = reference.UnionType.IsGenericType ? reference.UnionType.GetGenericArguments() : [];
-                        var genericMethod = reg.MakeGenericMethod([.. genericArgs, attr.ActionLastGenericType]);
+                        var reg = FindIpcProvider(delegateParams.Length + 1) ?? throw new NullReferenceException("Could not retrieve GetIpcProvider. Did you called EzIPC.Init before ECommonsMain.Init or specified more than 9 arguments?");
+                        var genericMethod = reg.MakeGenericMethod([.. delegateParams, attr.ActionLastGenericType]);
                         var name = attr.ApplyPrefix ? $"{prefix}.{ipcName}" : ipcName;
                         var callerInfo = genericMethod.Invoke(Svc.PluginInterface, [name])!;
-                        reference.SetValue(instance, ReflectionHelper.CreateDelegate(callerInfo.GetType().GetMethod("SendMessage"), callerInfo));
+                        reference.SetValue(instance, ReflectionHelper.CreateDelegate(reference.UnionType, callerInfo.GetType().GetMethod("SendMessage"), callerInfo));
+                    }
+                    else
+                    {
+                        PluginLog.Error($"[EzIPC Provider] {instanceType.Name}.{reference.Name} is marked with {nameof(EzIPCEventAttribute)} but its type {reference.UnionType} is not a delegate type with a void return value. Event provider was not assigned.");
                     }
                 }
             }
@@ -248,6 +262,23 @@ public static class EzIPC
         }
         Unregister.Clear();
         OnSafeInvocationException = null;
+    }
+
+    /// <summary>
+    /// Extracts parameter types and return type from any delegate type, including non-generic ones such as
+    /// <see cref="Action"/> and user-defined named delegates.
+    /// </summary>
+    /// <returns>Whether <paramref name="type"/> is a delegate type.</returns>
+    private static bool TryGetDelegateSignature(Type type, out Type[] parameters, out Type returnType)
+    {
+        parameters = [];
+        returnType = typeof(void);
+        if(type == null || !typeof(Delegate).IsAssignableFrom(type)) return false;
+        var invoke = type.GetMethod("Invoke");
+        if(invoke == null) return false;
+        parameters = [.. invoke.GetParameters().Select(x => x.ParameterType)];
+        returnType = invoke.ReturnType;
+        return true;
     }
 
     /// <summary>

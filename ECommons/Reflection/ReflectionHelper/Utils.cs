@@ -155,6 +155,22 @@ public static partial class ReflectionHelper
         return Delegate.CreateDelegate(getType(types.ToArray()), target, methodInfo.Name);
     }
 
+    /// <summary>
+    /// Creates delegate of an explicitly specified delegate type to a method by MethodInfo.
+    /// Unlike <see cref="CreateDelegate(MethodInfo, object)"/> which always produces an
+    /// <see cref="Action"/>/<see cref="Func{TResult}"/> shaped delegate, this overload can also produce
+    /// user-defined named delegate types, which is required when the destination field or property is
+    /// declared with one.
+    /// </summary>
+    /// <param name="delegateType">Type of the delegate to create. Must be a delegate type whose signature matches <paramref name="methodInfo"/>.</param>
+    /// <param name="methodInfo">MethodInfo of a method for which a delegate will be created.</param>
+    /// <param name="target">Instance object that is hosting the method. Pass null if a method is static.</param>
+    /// <returns></returns>
+    public static Delegate CreateDelegate(Type delegateType, MethodInfo methodInfo, object target)
+    {
+        return methodInfo.IsStatic ? methodInfo.CreateDelegate(delegateType) : methodInfo.CreateDelegate(delegateType, target);
+    }
+
     public static IFieldPropertyUnion[] GetFieldPropertyUnions(this Type type, BindingFlags bindingFlags = BindingFlags.Default, bool propertyFirst = false)
     {
         var ret = new List<IFieldPropertyUnion>();
