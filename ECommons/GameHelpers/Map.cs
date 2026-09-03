@@ -153,8 +153,8 @@ public static class Map
     /// 不設閘門會把 log 灌爆。
     /// </summary>
     /// <remarks>
-    /// 用 <c>Information</c> 等級是因為這是要請使用者回報的診斷,而使用者跑 LogLevel 2,
-    /// <c>Debug</c>/<c>Verbose</c> 收不到。
+    /// 用 <c>Information</c> 等級是因為這是要請使用者回報的診斷,而使用者跑 LogLevel 1,
+    /// 盲區只有 <c>Verbose</c>,<c>Debug</c> 收得到但單檔數十萬行會淹沒。
     /// 🔴 刻意記 log 而不是靜默回預設值:缺列代表本地 sheet 與遊戲對不上,
     /// 而這裡的退路(<c>Vector3.Zero</c> / <c>0</c>)看起來都像合法值,
     /// 靜默吞掉會把看得見的錯誤變成看不見的錯誤。

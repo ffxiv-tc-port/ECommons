@@ -91,7 +91,7 @@ public static class ExcelJobHelper
 
     /// <summary>
     /// 同一個未知職業 id 只記一次 —— 呼叫端多半在每幀迴圈裡,不設閘門會把 log 灌爆。
-    /// 用 <c>Warning</c> 等級是為了讓跑 LogLevel 2 的使用者看得到(這是要請人回報的診斷)。
+    /// 用 <c>Warning</c> 等級是為了讓跑 LogLevel 1 的使用者看得到(這是要請人回報的診斷)。
     /// </summary>
     private static void LogUnknownJobOnce(uint id)
     {
