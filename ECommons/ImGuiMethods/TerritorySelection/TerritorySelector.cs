@@ -3,6 +3,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Utility;
 using ECommons.DalamudServices;
 using ECommons.ExcelServices;
+using ECommons.LanguageHelpers;
 using ECommons.GameHelpers;
 using ECommons.Schedulers;
 using Dalamud.Bindings.ImGui;
@@ -160,11 +161,11 @@ public unsafe class TerritorySelector : Window
                 if(ImGui.BeginTabItem(x.Key.ToString(), SelectedCategory == x.Key ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
                 {
                     ImGui.SetNextItemWidth(200f);
-                    ImGui.InputTextWithHint($"##search", "Filter...", ref Filter, 50);
+                    ImGui.InputTextWithHint($"##search", "Filter...".Loc(), ref Filter, 50);
                     ImGui.SameLine();
-                    ImGui.Checkbox("Only selected", ref OnlySelected);
+                    ImGui.Checkbox("Only selected".Loc() + "##ECTSOnlySelected", ref OnlySelected);
                     ImGui.SameLine();
-                    ImGui.Checkbox("Show unnamed", ref ShowUnnamed);
+                    ImGui.Checkbox("Show unnamed".Loc() + "##ECTSShowUnnamed", ref ShowUnnamed);
                     if(Player.Available)
                     {
                         ImGui.SameLine();
@@ -234,14 +235,16 @@ public unsafe class TerritorySelector : Window
 
                             ImGui.TableHeadersRow();
 
+                            var categoryName = x.Key.ToString();
                             foreach(var t in x.Value)
                             {
-                                var cfc = t.ContentFinderCondition.ValueNullable?.Name.GetText() ?? "";
-                                var questBattle = t.QuestBattle.ValueNullable?.Quest.GetValueOrDefault<Quest>()?.Name.GetText() ?? "";
-                                var name = t.PlaceName.ValueNullable?.Name.GetText() ?? "";
-                                var zone = t.PlaceNameZone.ValueNullable?.Name.GetText() ?? "";
-                                var region = t.PlaceNameRegion.ValueNullable?.Name.GetText() ?? "";
-                                var intended = ((TerritoryIntendedUseEnum)t.TerritoryIntendedUse.RowId).ToString().Replace("_", " ") ?? "";
+                                var texts = GetRowTexts(t);
+                                var cfc = texts.Cfc;
+                                var questBattle = texts.QuestBattle;
+                                var name = texts.Name;
+                                var zone = texts.Zone;
+                                var region = texts.Region;
+                                var intended = texts.Intended;
                                 var col = t.RowId == Svc.ClientState.TerritoryType && Player.Available;
 
                                 if(Filter != ""
@@ -251,8 +254,8 @@ public unsafe class TerritorySelector : Window
                                     && !zone.Contains(Filter, StringComparison.OrdinalIgnoreCase)
                                     && !region.Contains(Filter, StringComparison.OrdinalIgnoreCase)
                                     && !intended.Contains(Filter, StringComparison.OrdinalIgnoreCase)
-                                    && !x.Key.ToString().Contains(Filter, StringComparison.OrdinalIgnoreCase)
-                                    && !t.RowId.ToString().Contains(Filter, StringComparison.OrdinalIgnoreCase))
+                                    && !categoryName.Contains(Filter, StringComparison.OrdinalIgnoreCase)
+                                    && !texts.Id.Contains(Filter, StringComparison.OrdinalIgnoreCase))
                                 {
                                     continue;
                                 }
@@ -268,7 +271,7 @@ public unsafe class TerritorySelector : Window
                                 ImGui.TableNextColumn();//checkbox
                                 if(!IsSingleSelection)
                                 {
-                                    if(ImGuiEx.CollectionCheckbox($"##sel{t.RowId}", t.RowId, SelectedTerritories))
+                                    if(ImGuiEx.CollectionCheckbox(texts.SelectId, t.RowId, SelectedTerritories))
                                     {
                                         try
                                         {
@@ -292,7 +295,7 @@ public unsafe class TerritorySelector : Window
                                 }
                                 else
                                 {
-                                    if(ImGui.RadioButton($"##sel{t.RowId}", t.RowId == SelectedTerritory))
+                                    if(ImGui.RadioButton(texts.SelectId, t.RowId == SelectedTerritory))
                                     {
                                         SelectedTerritory = t.RowId;
                                         try
@@ -308,7 +311,7 @@ public unsafe class TerritorySelector : Window
                                 if(ExtraColumns.Contains(Column.ID))
                                 {
                                     ImGui.TableNextColumn(); //id
-                                    ImGuiEx.Text($"{t.RowId}");
+                                    ImGuiEx.Text(texts.Id);
                                 }
 
                                 if(Mode == DisplayMode.PlaceNameDutyUnion)
@@ -372,6 +375,33 @@ public unsafe class TerritorySelector : Window
             ImGui.EndTabBar();
             SelectedCategory = null;
         }
+    }
+
+    // 列文字只取決於遊戲表，同一個選擇器開著期間不會變：每列第一次畫時算一次，之後每幀直接用。
+    private Dictionary<uint, RowTexts> RowTextCache;
+
+    private sealed class RowTexts
+    {
+        public string Cfc, QuestBattle, Name, Zone, Region, Intended, Id, SelectId;
+    }
+
+    private RowTexts GetRowTexts(TerritoryType t)
+    {
+        RowTextCache ??= [];
+        if(RowTextCache.TryGetValue(t.RowId, out var texts)) return texts;
+        texts = new()
+        {
+            Cfc = t.ContentFinderCondition.ValueNullable?.Name.GetText() ?? "",
+            QuestBattle = t.QuestBattle.ValueNullable?.Quest.GetValueOrDefault<Quest>()?.Name.GetText() ?? "",
+            Name = t.PlaceName.ValueNullable?.Name.GetText() ?? "",
+            Zone = t.PlaceNameZone.ValueNullable?.Name.GetText() ?? "",
+            Region = t.PlaceNameRegion.ValueNullable?.Name.GetText() ?? "",
+            Intended = ((TerritoryIntendedUseEnum)t.TerritoryIntendedUse.RowId).ToString().Replace("_", " ") ?? "",
+            Id = t.RowId.ToString(),
+            SelectId = $"##sel{t.RowId}",
+        };
+        RowTextCache[t.RowId] = texts;
+        return texts;
     }
 
     public override void OnClose()

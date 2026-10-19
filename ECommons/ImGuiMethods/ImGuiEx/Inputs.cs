@@ -1,4 +1,5 @@
 ﻿using Dalamud.Interface.Utility;
+using ECommons.LanguageHelpers;
 using ECommons.Throttlers;
 using Dalamud.Bindings.ImGui;
 using System;
@@ -255,11 +256,11 @@ public static partial class ImGuiEx
         if(!InputListValuesString.ContainsKey(name)) InputListValuesString[name] = new("");
         InputList(name, list, overrideValues, delegate
         {
-            var buttonSize = ImGuiHelpers.GetButtonSize("Add");
+            var buttonSize = ImGuiHelpers.GetButtonSize("Add".Loc());
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - buttonSize.X - ImGui.GetStyle().ItemSpacing.X);
             ImGui.InputText($"##{name.Replace("#", "_")}", ref InputListValuesString[name].Value, 100);
             ImGui.SameLine();
-            if(ImGui.Button("Add"))
+            if(ImGui.Button("Add".Loc()))
             {
                 list.Add(InputListValuesString[name].Value);
                 InputListValuesString[name].Value = "";
@@ -273,11 +274,11 @@ public static partial class ImGuiEx
         if(!InputListValuesUint.ContainsKey(name)) InputListValuesUint[name] = new(0);
         InputList(name, list, overrideValues, delegate
         {
-            var buttonSize = ImGuiHelpers.GetButtonSize("Add");
+            var buttonSize = ImGuiHelpers.GetButtonSize("Add".Loc());
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - buttonSize.X - ImGui.GetStyle().ItemSpacing.X);
             ImGuiEx.InputUint($"##{name.Replace("#", "_")}", ref InputListValuesUint[name].Value);
             ImGui.SameLine();
-            if(ImGui.Button("Add"))
+            if(ImGui.Button("Add".Loc()))
             {
                 list.Add(InputListValuesUint[name].Value);
                 InputListValuesUint[name].Value = 0;
@@ -303,11 +304,11 @@ public static partial class ImGuiEx
                 }
                 if(ImGui.BeginPopup(id))
                 {
-                    if(ImGui.Selectable("Delete##ECommonsDeleItem"))
+                    if(ImGui.Selectable("Delete".Loc() + "##ECommonsDeleItem"))
                     {
                         rem = i;
                     }
-                    if(ImGui.Selectable("Clear (hold shift+ctrl)##ECommonsDeleItem")
+                    if(ImGui.Selectable("Clear (hold shift+ctrl)".Loc() + "##ECommonsDeleItem")
                         && ImGui.GetIO().KeyShift && ImGui.GetIO().KeyCtrl)
                     {
                         rem = -2;
@@ -409,9 +410,10 @@ public static partial class ImGuiEx
     public static bool EnumCombo<T>(string name, ref T refConfigField, Func<T, bool> filter = null, IDictionary<T, string> names = null) where T : Enum, IConvertible
     {
         var ret = false;
-        if(ImGui.BeginCombo(name, (names != null && names.TryGetValue(refConfigField, out var n)) ? n : refConfigField.ToString().Replace("_", " "), ImGuiComboFlags.HeightLarge))
+        if(ImGui.BeginCombo(name, (names != null && names.TryGetValue(refConfigField, out var n)) ? n : EnumCache<T>.Label(refConfigField), ImGuiComboFlags.HeightLarge))
         {
-            var values = Enum.GetValues(typeof(T));
+            var values = EnumCache<T>.Values;
+            var labels = EnumCache<T>.Labels;
             Box<string> fltr = null;
             if(values.Length > 10)
             {
@@ -420,17 +422,18 @@ public static partial class ImGuiEx
                 ImGuiEx.SetNextItemFullWidth();
                 ImGui.InputTextWithHint($"##{name.Replace("#", "_")}", "Filter...", ref fltr.Value, 50);
             }
-            foreach(var x in values)
+            for(var i = 0; i < values.Length; i++)
             {
-                var equals = EqualityComparer<T>.Default.Equals((T)x, refConfigField);
-                var element = (names != null && names.TryGetValue((T)x, out n)) ? n : x.ToString().Replace("_", " ");
-                if((filter == null || filter((T)x))
+                var x = values[i];
+                var equals = EqualityComparer<T>.Default.Equals(x, refConfigField);
+                var element = (names != null && names.TryGetValue(x, out n)) ? n : labels[i];
+                if((filter == null || filter(x))
                     && (fltr == null || element.Contains(fltr.Value, StringComparison.OrdinalIgnoreCase))
                     && ImGui.Selectable(element, equals)
                     )
                 {
                     ret = true;
-                    refConfigField = (T)x;
+                    refConfigField = x;
                 }
                 if(ImGui.IsWindowAppearing() && equals) ImGui.SetScrollHereY();
             }
@@ -442,9 +445,10 @@ public static partial class ImGuiEx
     public static bool EnumCombo<T>(string name, ref Nullable<T> refConfigField, Func<T, bool> filter = null, IDictionary<T, string> names = null, string nullName = "Not selected") where T : struct, Enum, IConvertible
     {
         var ret = false;
-        if(ImGui.BeginCombo(name, refConfigField == null ? nullName : ((names != null && names.TryGetValue(refConfigField.Value, out var n)) ? n : refConfigField.Value.ToString().Replace("_", " ")), ImGuiComboFlags.HeightLarge))
+        if(ImGui.BeginCombo(name, refConfigField == null ? nullName : ((names != null && names.TryGetValue(refConfigField.Value, out var n)) ? n : EnumCache<T>.Label(refConfigField.Value)), ImGuiComboFlags.HeightLarge))
         {
-            var values = Enum.GetValues(typeof(T));
+            var values = EnumCache<T>.Values;
+            var labels = EnumCache<T>.Labels;
             Box<string> fltr = null;
             if(values.Length > 10)
             {
@@ -458,17 +462,18 @@ public static partial class ImGuiEx
                 ret = true;
                 refConfigField = null;
             }
-            foreach(var x in values)
+            for(var i = 0; i < values.Length; i++)
             {
-                var equals = EqualityComparer<Nullable<T>>.Default.Equals((T)x, refConfigField);
-                var element = (names != null && names.TryGetValue((T)x, out n)) ? n : x.ToString().Replace("_", " ");
-                if((filter == null || filter((T)x))
+                var x = values[i];
+                var equals = EqualityComparer<Nullable<T>>.Default.Equals(x, refConfigField);
+                var element = (names != null && names.TryGetValue(x, out n)) ? n : labels[i];
+                if((filter == null || filter(x))
                     && (fltr == null || element.Contains(fltr.Value, StringComparison.OrdinalIgnoreCase))
                     && ImGui.Selectable(element, equals)
                     )
                 {
                     ret = true;
-                    refConfigField = (T)x;
+                    refConfigField = x;
                 }
                 if(ImGui.IsWindowAppearing() && equals) ImGui.SetScrollHereY();
             }
@@ -513,18 +518,20 @@ public static partial class ImGuiEx
     public static bool EnumRadio<T>(ref T refConfigField, bool sameLine = false, Func<T, bool> filter = null, IDictionary<T, string> names = null) where T : Enum, IConvertible
     {
         var ret = false;
-        var values = Enum.GetValues(typeof(T));
+        var values = EnumCache<T>.Values;
+        var labels = EnumCache<T>.Labels;
         var first = true;
-        foreach(var x in values)
+        for(var i = 0; i < values.Length; i++)
         {
+            var x = values[i];
             if(!first && sameLine) ImGui.SameLine();
             first = false;
-            var equals = EqualityComparer<T>.Default.Equals((T)x, refConfigField);
-            var element = (names != null && names.TryGetValue((T)x, out var n)) ? n : x.ToString().Replace("_", " ");
-            if((filter == null || filter((T)x)) && ImGui.RadioButton(element, equals))
+            var equals = EqualityComparer<T>.Default.Equals(x, refConfigField);
+            var element = (names != null && names.TryGetValue(x, out var n)) ? n : labels[i];
+            if((filter == null || filter(x)) && ImGui.RadioButton(element, equals))
             {
                 ret = true;
-                refConfigField = (T)x;
+                refConfigField = x;
             }
         }
         return ret;

@@ -141,6 +141,7 @@ var type = "unknown build";
         GenericHelpers.Safe(() => ThreadLoadImageHandler.httpClient?.Dispose());
         EzThrottler.Throttler = null;
         FrameThrottler.Throttler = null;
+        GenericHelpers.Safe(FrameThrottlerClock.Dispose);
         GenericHelpers.Safe(Callback.Dispose);
         GenericHelpers.Safe(EzEvent.DisposeAll);
         GenericHelpers.Safe(EzHookCommon.DisposeAll);

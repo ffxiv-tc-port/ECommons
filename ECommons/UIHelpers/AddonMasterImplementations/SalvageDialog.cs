@@ -25,7 +25,9 @@ public partial class AddonMaster
             if(Addon->BulkDesynthCheckboxNode != null && !Addon->BulkDesynthCheckboxNode->IsChecked)
             {
                 Addon->BulkDesynthCheckboxNode->IsChecked = true;
-                DesynthesizeButton->SetEnabledState(true);
+                // GetComponentButtonById 合法回 null；SetEnabledState 是原生 interop，this=0 就是 AVE。
+                if(DesynthesizeButton != null)
+                    DesynthesizeButton->SetEnabledState(true);
             }
         }
     }

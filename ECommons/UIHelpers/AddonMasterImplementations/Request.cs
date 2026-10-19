@@ -15,13 +15,13 @@ public partial class AddonMaster
 
         public Request(void* addon) : base(addon) { }
 
-        public AtkComponentButton* HandOverButton => Base->GetComponentButtonById(14);
-        public AtkComponentButton* CancelButton => Base->GetComponentButtonById(15);
+        public AtkComponentButton* HandOverButton => ButtonByIdOrNull(14);
+        public AtkComponentButton* CancelButton => ButtonByIdOrNull(15);
 
         public void HandOver() => ClickButtonIfEnabled(HandOverButton);
         public void Cancel() => ClickButtonIfEnabled(CancelButton);
 
-        public bool IsHandOverEnabled => HandOverButton->IsEnabled;
+        public bool IsHandOverEnabled => GenericHelpers.IsComponentEnabled(HandOverButton);
 
         public bool IsFilled
         {

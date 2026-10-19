@@ -20,6 +20,7 @@ SOFTWARE.
 */
 using ECommons.DalamudServices;
 using ECommons.EzHookManager;
+using ECommons.GameHelpers;
 using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Client.System.Memory;
 using FFXIVClientStructs.FFXIV.Client.System.String;
@@ -43,14 +44,23 @@ public static unsafe class Chat
         public static readonly string SendChatSignature = "48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 48 8B F2 48 8B F9 45 84 C9";
         public static readonly string SanitiseStringSignature = "48 89 5C 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 70 4D 8B F8 4C 89 44 24 ?? 4C 8B 05 ?? ?? ?? ?? 44 8B E2";
 
+        // 兩個取得器：特徵碼對不上時回 null（結果快取、只記一次 Warning），不再每次讀都重掃再擲。
+        private static bool ProcessChatBoxFailed = false;
+        private static bool SanitizeStringFailed = false;
+
         public delegate void ProcessChatBoxDelegate(IntPtr uiModule, IntPtr message, IntPtr unused, byte a4);
         public static ProcessChatBoxDelegate ProcessChatBox
         {
             get
             {
-                if(field == null)
+                if(field == null && !ProcessChatBoxFailed)
                 {
-                    var addr = Svc.SigScanner.ScanText(SendChatSignature);
+                    if(!Svc.SigScanner.TryScanText(SendChatSignature, out var addr))
+                    {
+                        ProcessChatBoxFailed = true;
+                        PluginLog.Warning($"Chat: signature for chat sending not found; Chat.SendMessage/ExecuteCommand will do nothing until the plugin is reloaded ({SendChatSignature})");
+                        return null;
+                    }
                     PluginLog.Debug($"ProcessChatBox addr: {(nint)addr:X16}");
                     field = EzDelegate.Get<ProcessChatBoxDelegate>(addr) ?? throw new InvalidOperationException("Could not find signature for chat sending");
                 }
@@ -62,39 +72,18 @@ public static unsafe class Chat
         {
             get
             {
-                if(field == null)
+                if(field == null && !SanitizeStringFailed)
                 {
-                    var addr = Svc.SigScanner.ScanText(SanitiseStringSignature);
+                    if(!Svc.SigScanner.TryScanText(SanitiseStringSignature, out var addr))
+                    {
+                        SanitizeStringFailed = true;
+                        PluginLog.Warning($"Chat: SanitizeString signature not found; Chat.SendMessage/ExecuteCommand will do nothing and Chat.SanitiseText will throw until the plugin is reloaded ({SanitiseStringSignature})");
+                        return null;
+                    }
                     PluginLog.Debug($"SanitizeString addr: {(nint)addr:X16}");
                     field = EzDelegate.Get<SanitizeStringDeletage>(addr) ?? throw new InvalidOperationException("Could not find SanitizeString signature");
                 }
                 return field;
-            }
-        }
-
-        [StructLayout(LayoutKind.Explicit)]
-        public readonly struct ChatPayload : IDisposable
-        {
-            [FieldOffset(0)]
-            private readonly IntPtr textPtr;
-            [FieldOffset(16)]
-            private readonly ulong textLen;
-            [FieldOffset(8)]
-            private readonly ulong unk1;
-            [FieldOffset(24)]
-            private readonly ulong unk2;
-            internal ChatPayload(byte[] stringBytes)
-            {
-                textPtr = Marshal.AllocHGlobal(stringBytes.Length + 30);
-                Marshal.Copy(stringBytes, 0, textPtr, stringBytes.Length);
-                Marshal.WriteByte(textPtr + stringBytes.Length, 0);
-                textLen = (ulong)(stringBytes.Length + 1);
-                unk1 = 64;
-                unk2 = 0;
-            }
-            public void Dispose()
-            {
-                Marshal.FreeHGlobal(textPtr);
             }
         }
     }
@@ -111,16 +100,41 @@ public static unsafe class Chat
     /// </para>
     /// </summary>
     /// <param name="message">Message to send</param>
-    /// <exception cref="InvalidOperationException">If the signature for this function could not be found</exception>
+    /// <remarks>If the signature for this function could not be found, logs a warning once and does nothing.</remarks>
+    /// <exception cref="InvalidOperationException">If the framework, UI module, or the game's string functions are not available</exception>
     [Obsolete("Use safe message sending")]
     public static void SendMessageUnsafe(byte[] message)
     {
-        var uiModule = (IntPtr)Framework.Instance()->GetUIModule();
-        using var payload = new ChatPayload(message);
-        var mem1 = Marshal.AllocHGlobal(400);
-        Marshal.StructureToPtr(payload, mem1, false);
-        ProcessChatBox(uiModule, mem1, IntPtr.Zero, 0);
-        Marshal.FreeHGlobal(mem1);
+        var processChatBox = ProcessChatBox;
+        if(processChatBox == null) return;
+        // 🔴 Framework.Instance() 是 [StaticAddress(..., isPointer: true)]:回的是靜態位址裡存放的指標值,
+        // 產生器不判空,登入前/關閉中真的會是 null。GetUIModule() 是原生成員函式,對 null 的 this 呼叫是
+        // AccessViolation(corrupted-state exception,try/catch 攔不到)。
+        // 沿用本檔缺必要前提時擲 InvalidOperationException 的慣例(見上面的特徵碼取得器):
+        // 訊息不送出,呼叫端拿到的是可攔截的例外而不是遊戲崩潰。
+        var framework = CSAddress.FrameworkOrNull();
+        if(framework == null) throw new InvalidOperationException("Framework is not available; chat message was not sent.");
+        if(!CSAddress.Resolved(Framework.MemberFunctionPointers.GetUIModule)) throw new InvalidOperationException("UIModule is not available; chat message was not sent.");
+        var uiModulePtr = framework->GetUIModule();
+        if(uiModulePtr == null) throw new InvalidOperationException("UIModule is not available; chat message was not sent.");
+        var uiModule = (IntPtr)uiModulePtr;
+        // 遊戲要的是完整初始化的 Utf8String（0x68）；字串內容到第一個 NUL 為止，與原生 C 字串讀法相同。
+        var terminated = new byte[message.Length + 1];
+        message.CopyTo(terminated, 0);
+        Utf8String* text;
+        fixed(byte* bytes = terminated)
+        {
+            text = Utf8String.FromSequence(bytes);
+        }
+        try
+        {
+            processChatBox(uiModule, (IntPtr)text, IntPtr.Zero, 0);
+        }
+        finally
+        {
+            text->Dtor();
+            IMemorySpace.Free(text);
+        }
     }
     /// <summary>
     /// <para>
@@ -133,8 +147,9 @@ public static unsafe class Chat
     /// </para>
     /// </summary>
     /// <param name="message">message to send</param>
+    /// <remarks>If a signature this needs could not be found, logs a warning once and does nothing (empty or over-long messages still throw).</remarks>
     /// <exception cref="ArgumentException">If <paramref name="message"/> is empty, longer than 500 bytes in UTF-8, or contains invalid characters.</exception>
-    /// <exception cref="InvalidOperationException">If the signature for this function could not be found</exception>
+    /// <exception cref="InvalidOperationException">If the framework or UI module is not available</exception>
     public static void SendMessage(string message)
     {
         var bytes = Encoding.UTF8.GetBytes(message);
@@ -146,6 +161,7 @@ public static unsafe class Chat
         {
             throw new ArgumentException("message is longer than 500 bytes", nameof(message));
         }
+        if(SanitizeString == null || ProcessChatBox == null) return;
         if(message.Length != SanitiseText(message).Length)
         {
             throw new ArgumentException("message contained invalid characters", nameof(message));

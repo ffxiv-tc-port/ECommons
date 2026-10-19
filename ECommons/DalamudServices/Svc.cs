@@ -56,6 +56,11 @@ public class Svc
     [PluginService] public static INotificationManager NotificationManager { get; private set; }
     [PluginService] public static IContextMenu ContextMenu { get; private set; }
     [PluginService] public static IMarketBoard MarketBoard { get; private set; }
+    /// <remarks>
+    /// API13 把 <c>IClientState.LocalContentId</c> 標為過時,替代品是這個服務的 <c>ContentId</c>
+    /// (Dalamud 端前者本來就是後者的純轉發,取值行為相同)。
+    /// </remarks>
+    [PluginService] public static IPlayerState PlayerState { get; private set; }
 
     internal static bool IsInitialized = false;
     public static void Init(IDalamudPluginInterface pi)

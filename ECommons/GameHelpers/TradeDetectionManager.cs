@@ -65,10 +65,12 @@ public static unsafe class TradeDetectionManager
         }
     }
 
+    /// <returns>交易對象;找不到,或 <c>InventoryManager</c> 的位址沒解出時回 null。</returns>
     public static IPlayerCharacter GetTradePartner()
     {
         //Client::Game::InventoryManager_SendTradeRequest
-        var id = *(uint*)(((nint)InventoryManager.Instance()) + 8612);
+        if(!CSAddress.TryInventoryManager(out var manager)) return null;
+        var id = manager->TradePartnerEntityId;
         return Svc.Objects.OfType<IPlayerCharacter>().FirstOrDefault(x => x.EntityId == id);
     }
 
@@ -132,9 +134,12 @@ public static unsafe class TradeDetectionManager
         InventoryType.Crystals,
         ];
 
+    /// <returns>道具 id → 數量;背包相關位址沒解出時回 null(＝沒有快照,交易結果不計算),不是空表。</returns>
     public static Dictionary<uint, uint> GetInventorySnapshot(IEnumerable<InventoryType> validInventories)
     {
-        var im = InventoryManager.Instance();
+        if(!CSAddress.TryInventoryManager(out var im)
+            || !CSAddress.Resolved(InventoryManager.MemberFunctionPointers.GetInventoryItemCount)
+            || !CSAddress.Resolved(InventoryManager.MemberFunctionPointers.GetInventoryContainer)) return null;
         var ret = new Dictionary<uint, uint>
         {
             [1] = (uint)im->GetInventoryItemCount(1)

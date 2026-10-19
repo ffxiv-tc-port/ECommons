@@ -28,21 +28,6 @@ public static unsafe partial class ImGuiEx
             ImGui.EndDisabled();
             return false;
         }
-        void RemoveAll()
-        {
-            foreach(var el in values)
-            {
-                collection.Remove(el);
-            }
-        }
-        void AddAll()
-        {
-            foreach(var el in values)
-            {
-                collection.Remove(el);
-                collection.Add(el);
-            }
-        }
         if(!inverted)
         {
             if(collection.ContainsAll(values))
@@ -50,7 +35,7 @@ public static unsafe partial class ImGuiEx
                 var x = true;
                 if(ImGui.Checkbox(label, ref x))
                 {
-                    Execute(RemoveAll, delayedOperation);
+                    Execute(CollectionRemoveAll(values, collection), delayedOperation);
                     return true;
                 }
             }
@@ -59,7 +44,7 @@ public static unsafe partial class ImGuiEx
                 var x = collection.ContainsAny(values);
                 if(ImGuiEx.CheckboxBullet(label, ref x))
                 {
-                    Execute(AddAll, delayedOperation);
+                    Execute(CollectionAddAll(values, collection), delayedOperation);
                     return true;
                 }
             }
@@ -71,7 +56,7 @@ public static unsafe partial class ImGuiEx
                 var x = true;
                 if(ImGui.Checkbox(label, ref x))
                 {
-                    Execute(AddAll, delayedOperation);
+                    Execute(CollectionAddAll(values, collection), delayedOperation);
                     return true;
                 }
             }
@@ -80,13 +65,31 @@ public static unsafe partial class ImGuiEx
                 var x = !collection.ContainsAll(values);
                 if(ImGuiEx.CheckboxBullet(label, ref x))
                 {
-                    Execute(RemoveAll, delayedOperation);
+                    Execute(CollectionRemoveAll(values, collection), delayedOperation);
                     return true;
                 }
             }
         }
         return false;
     }
+
+    // 閉包只在真的點下去時才建立：這些勾選框每幀每列都畫，沒點的那幾幀不該配置。
+    private static Action CollectionRemoveAll<T>(IEnumerable<T> values, ICollection<T> collection) => () =>
+    {
+        foreach(var el in values)
+        {
+            collection.Remove(el);
+        }
+    };
+
+    private static Action CollectionAddAll<T>(IEnumerable<T> values, ICollection<T> collection) => () =>
+    {
+        foreach(var el in values)
+        {
+            collection.Remove(el);
+            collection.Add(el);
+        }
+    };
 
     /// <summary>
     /// Checkbox that adds/removes a value from the collection. Displays check mark when element is present in a collection, and doesn't displays checkmark when element is not present.
@@ -100,8 +103,15 @@ public static unsafe partial class ImGuiEx
     /// <returns></returns>
     public static bool CollectionCheckbox<T>(string label, T value, ICollection<T> collection, bool inverted = false, bool delayedOperation = false)
     {
-        bool Draw(ref bool x) => ImGui.Checkbox(label, ref x);
-        return CollectionCore(Draw, value, collection, inverted, delayedOperation);
+        // 與 CollectionCore(x => ImGui.Checkbox(label, ref x), …) 相同，只是不為每次呼叫建立 draw 委派。
+        var x = collection.Contains(value);
+        if(inverted) x = !x;
+        if(ImGui.Checkbox(label, ref x))
+        {
+            Execute(CollectionApply(x, value, collection, inverted), delayedOperation);
+            return true;
+        }
+        return false;
     }
 
     public delegate bool CollectionCoreDelegate(ref bool contains);
@@ -111,25 +121,27 @@ public static unsafe partial class ImGuiEx
         if(inverted) x = !x;
         if(draw(ref x))
         {
-            Execute(delegate
-            {
-                if(inverted) x = !x;
-                if(x)
-                {
-                    collection.Add(value);
-                }
-                else
-                {
-                    while(collection.Contains(value))
-                    {
-                        if(!collection.Remove(value)) break;
-                    }
-                }
-            }, delayedOperation);
+            Execute(CollectionApply(x, value, collection, inverted), delayedOperation);
             return true;
         }
         return false;
     }
+
+    private static Action CollectionApply<T>(bool x, T value, ICollection<T> collection, bool inverted) => delegate
+    {
+        if(inverted) x = !x;
+        if(x)
+        {
+            collection.Add(value);
+        }
+        else
+        {
+            while(collection.Contains(value))
+            {
+                if(!collection.Remove(value)) break;
+            }
+        }
+    };
 
     public static bool CollectionButtonCheckbox<T>(FontAwesomeIcon icon, T value, ICollection<T> collection, bool smallButton = false, bool inverted = false)
     {

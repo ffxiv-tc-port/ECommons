@@ -110,7 +110,7 @@ public class EzHook<T> where T : System.Delegate
     /// <summary>
     /// Calls original function as if it was unhooked if hook is enabled; calls original Delegate if hook is disabled.
     /// </summary>
-    public T Original => HookDelegate?.Original ?? Delegate;
+    public T Original => HookDelegate?.OriginalDisposeSafe ?? Delegate;
 
     private static void Log(string s) => PluginLog.Debug($"[EzHook] {s}");
 }

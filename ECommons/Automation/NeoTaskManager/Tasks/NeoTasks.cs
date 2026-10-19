@@ -27,7 +27,12 @@ public static unsafe class NeoTasks
             var obj = getObjectFunc();
             if(obj == null) return false;
             if(!Player.Interactable) return false;
-            if(AgentMap.Instance()->IsPlayerMoving)
+            // AgentMap.Instance() 是 [Agent] 產生器的取得器,AgentModule 還沒起來時真的回 null,
+            // 裸解參考是攔不到的 AccessViolation。讀不到就當「這一輪還不能判斷」回 false 重試,
+            // 不落進 else 分支去送移動指令。
+            var agentMap = CSAddress.AgentChainResolved() ? AgentMap.Instance() : null;
+            if(agentMap == null) return false;
+            if(agentMap->IsPlayerMoving)
             {
                 if(Player.DistanceTo(obj) < distance && EzThrottler.Throttle("TaskFunction.AutomoveOff", 200))
                 {
@@ -75,7 +80,9 @@ public static unsafe class NeoTasks
                 {
                     if(EzThrottler.Throttle("TaskFunction.Interact"))
                     {
-                        TargetSystem.Instance()->InteractWithObject(obj.Struct(), checkLos);
+                        // 位址沒解出:不互動也不回報完成(回 true 會讓後面的 task 以為已經互動過)。
+                        if(!CSAddress.TryTargetSystem(out var targetSystem) || !CSAddress.Resolved(TargetSystem.MemberFunctionPointers.InteractWithObject)) return false;
+                        targetSystem->InteractWithObject(obj.Struct(), checkLos);
                         return true;
                     }
                 }

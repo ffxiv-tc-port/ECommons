@@ -2,6 +2,8 @@
 using ECommons.DalamudServices;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel.Sheets;
+using Lumina.Text.ReadOnly;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
 using Action = Lumina.Excel.Sheets.Action;
@@ -41,26 +43,26 @@ public readonly unsafe record struct ActionEffectSet
         {
             case ActionType.KeyItem:
                 EventItem = Svc.Data.GetExcelSheet<EventItem>()!.GetRowOrDefault(effectHeader->ActionID);
-                Name = EventItem?.Singular.ToString() ?? string.Empty;
+                Name = CachedName(effectHeader->ActionType, effectHeader->ActionID, EventItem?.Singular);
                 IconId = EventItem?.Icon ?? 0;
                 break;
 
             case ActionType.Item:
                 var id = effectHeader->ActionID > 1000000 ? effectHeader->ActionID - 1000000 : effectHeader->ActionID;
                 Item = Svc.Data.GetExcelSheet<Item>()!.GetRowOrDefault(id);
-                Name = Item?.Name.ToString() ?? string.Empty;
+                Name = CachedName(effectHeader->ActionType, id, Item?.Name);
                 IconId = Item?.Icon ?? 0;
                 break;
 
             case ActionType.Mount:
                 Mount = Svc.Data.GetExcelSheet<Mount>()!.GetRowOrDefault(effectHeader->ActionID);
-                Name = Mount?.Singular.ToString() ?? string.Empty;
+                Name = CachedName(effectHeader->ActionType, effectHeader->ActionID, Mount?.Singular);
                 IconId = Mount?.Icon ?? 0;
                 break;
 
             default:
                 Action = Svc.Data.GetExcelSheet<Action>()!.GetRowOrDefault(effectHeader->ActionID);
-                Name = Action?.Name.ToString() ?? string.Empty;
+                Name = CachedName(effectHeader->ActionType, effectHeader->ActionID, Action?.Name);
 
                 var actionCate = Action?.ActionCategory.ValueNullable?.RowId ?? 0;
 
@@ -81,6 +83,19 @@ public readonly unsafe record struct ActionEffectSet
         {
             TargetEffects[i] = new TargetEffect(effectTail[i], effectArray + 8 * i);
         }
+    }
+
+    // 名稱只由（種類, 列 ID）決定、遊戲表執行期間不變：每個技能效果都會建一次這個結構，名稱字串每種只轉一次。
+    // 鍵含原始 ActionType（不是 switch 的分支），與舊版每次 ToString() 的結果逐字相同。
+    private static readonly ConcurrentDictionary<ulong, string> NameCache = new();
+
+    private static string CachedName(ActionType type, uint rowId, ReadOnlySeString? name)
+    {
+        var key = ((ulong)(byte)type << 32) | rowId;
+        if(NameCache.TryGetValue(key, out var cached)) return cached;
+        var value = name?.ToString() ?? string.Empty;
+        NameCache.TryAdd(key, value);
+        return value;
     }
 
     public Dictionary<ulong, uint> GetSpecificTypeEffect(ActionEffectType type)

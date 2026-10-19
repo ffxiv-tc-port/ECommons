@@ -26,11 +26,12 @@ public partial class AddonMaster
         {
             get
             {
-                var reader = new ReaderRetainerList(Base);
-                var entries = new Entry[reader.Retainers.Count];
+                // ReaderRetainerList.Retainers 每次存取都重讀整份清單,這裡只讀一次;每次呼叫仍回全新的陣列與 Entry。
+                var list = new ReaderRetainerList(Base).Retainers;
+                var entries = new Entry[list.Count];
                 for(var i = 0; i < entries.Length; i++)
                 {
-                    entries[i] = new(Base, reader.Retainers[i], i);
+                    entries[i] = new(Base, list[i], i);
                 }
                 return entries;
             }

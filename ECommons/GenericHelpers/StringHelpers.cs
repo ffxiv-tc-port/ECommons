@@ -173,10 +173,30 @@ public static unsafe partial class GenericHelpers
     public static bool EqualsIgnoreCase(this string s, string other) => s.Equals(other, StringComparison.OrdinalIgnoreCase);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool EqualsIgnoreCaseAny(this string obj, params string[] values) => values.Any(x => x.Equals(obj, StringComparison.OrdinalIgnoreCase));
+    public static bool EqualsIgnoreCaseAny(this string obj, params string[] values) => EqualsIgnoreCaseAny(obj, (IEnumerable<string>)values);
 
+    // 迴圈取代 Any＋閉包；null 元素照舊擲 NullReferenceException、values 為 null 照舊擲 ArgumentNullException。
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool EqualsIgnoreCaseAny(this string obj, IEnumerable<string> values) => values.Any(x => x.Equals(obj, StringComparison.OrdinalIgnoreCase));
+    public static bool EqualsIgnoreCaseAny(this string obj, IEnumerable<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ReadOnlySpan<string> span;
+        if(values is string[] array) span = array;
+        else if(values.GetType() == typeof(List<string>)) span = CollectionsMarshal.AsSpan((List<string>)values);
+        else
+        {
+            foreach(var x in values)
+            {
+                if(x.Equals(obj, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+        foreach(var x in span)
+        {
+            if(x.Equals(obj, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string? NullWhenEmpty(this string s) => s == string.Empty ? null : s;

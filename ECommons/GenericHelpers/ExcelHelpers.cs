@@ -101,4 +101,18 @@ public static unsafe partial class GenericHelpers
 
     public static TExtension GetExtension<TExtension, TBase>(this TBase row) where TExtension : struct, IExcelRow<TExtension>, IRowExtension<TExtension, TBase> where TBase : struct, IExcelRow<TBase>
         => TExtension.GetExtended(row);
+
+    /// <summary>
+    /// 同 <see cref="GetExtension{TExtension, TBase}(TBase)"/>,但擴充表裡沒有對應列時回
+    /// <see langword="null"/> 而不是擲例外。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 基底表有某列、擴充表沒有,在台服是會發生的(兩張表的列集合不保證一致),
+    /// 而 <c>GetRow</c> 對這種情況是<b>擲例外</b>不是回 null。
+    /// ⚠️ 這個多載走的是預設的「同 RowId 直查擴充表」路徑,不會經過
+    /// <c>IRowExtension.GetExtended</c> 的自訂實作 —— 目前唯一的實作
+    /// (<c>ExtendedBaseParam</c>)用的就是預設實作,兩者等價。
+    /// </remarks>
+    public static TExtension? GetExtensionOrDefault<TExtension, TBase>(this TBase row) where TExtension : struct, IExcelRow<TExtension>, IRowExtension<TExtension, TBase> where TBase : struct, IExcelRow<TBase>
+        => Svc.Data.GetExcelSheet<TExtension>().GetRowOrDefault(row.RowId);
 }

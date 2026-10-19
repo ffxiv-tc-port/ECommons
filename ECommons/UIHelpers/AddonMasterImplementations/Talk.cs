@@ -23,9 +23,12 @@ public partial class AddonMaster
 
         public void Click()
         {
+            // 取不到 AtkStage 就完全不送事件:帶著假 Target 的事件會在遊戲碼裡引發攔不到的
+            // AccessViolation,理由見 AddonMasterBase.TryCreateAtkEvent。
+            if(!TryCreateAtkEvent(out var atkEvent, 132)) return;
             var evt = stackalloc AtkEvent[1]
             {
-                CreateAtkEvent(132),
+                atkEvent,
             };
             var data = stackalloc AtkEventData[1];
             for(var i = 0; i < sizeof(AtkEventData); i++)

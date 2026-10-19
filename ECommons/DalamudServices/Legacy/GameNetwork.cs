@@ -26,7 +26,14 @@ internal sealed unsafe class GameNetwork : IGameNetwork
         this.address = new GameNetworkAddressResolver();
         this.address.Setup(Svc.SigScanner);
 
-        var onReceivePacketAddress = (nint)PacketDispatcher.StaticVirtualTablePointer->OnReceivePacket;
+        // 改版後位址解不出時不建 hook：NetworkMessage 永遠不觸發，而不是每次取用 Svc.GameNetwork 都重掃再擲。
+        var vtable = PacketDispatcher.StaticVirtualTablePointer;
+        if(vtable == null || this.address.ProcessZonePacketUp == IntPtr.Zero)
+        {
+            PluginLog.Warning($"GameNetwork: packet dispatcher vtable or ProcessZonePacketUp not found (vtable resolved: {vtable != null}); NetworkMessage will never fire until the plugin is reloaded");
+            return;
+        }
+        var onReceivePacketAddress = (nint)vtable->OnReceivePacket;
 
         PluginLog.Debug("===== G A M E N E T W O R K =====");
         PluginLog.Debug($"OnReceivePacket address {Util.DescribeAddress(onReceivePacketAddress)}");
@@ -51,8 +58,8 @@ internal sealed unsafe class GameNetwork : IGameNetwork
     private void Dispose()
     {
         PluginLog.Debug($"Disposing GameNetwork");
-        this.processZonePacketDownHook.Dispose();
-        this.processZonePacketUpHook.Dispose();
+        this.processZonePacketDownHook?.Dispose();
+        this.processZonePacketUpHook?.Dispose();
     }
 
     private void ProcessZonePacketDownDetour(PacketDispatcher* dispatcher, uint targetId, IntPtr dataPtr)
@@ -91,7 +98,7 @@ internal sealed unsafe class GameNetwork : IGameNetwork
             }
         }
 
-        this.processZonePacketDownHook.Original(dispatcher, targetId, dataPtr + 0x10);
+        this.processZonePacketDownHook.OriginalDisposeSafe(dispatcher, targetId, dataPtr + 0x10);
         this.hitchDetectorDown.Stop();
     }
 
@@ -124,6 +131,6 @@ internal sealed unsafe class GameNetwork : IGameNetwork
 
         this.hitchDetectorUp.Stop();
 
-        return this.processZonePacketUpHook.Original(a1, dataPtr, a3, a4);
+        return this.processZonePacketUpHook.OriginalDisposeSafe(a1, dataPtr, a3, a4);
     }
 }

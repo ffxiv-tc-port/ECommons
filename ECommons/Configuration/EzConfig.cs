@@ -67,6 +67,15 @@ public static class EzConfig
     /// </summary>
     public static object? Config { get; private set; }
 
+    /// <summary>
+    /// Replaces default configuration reference: <see cref="Save"/> writes <paramref name="newReference"/> from now on (null makes it a no-op). Does not write anything by itself.
+    /// </summary>
+    public static T Set<T>(T newReference)
+    {
+        Config = newReference;
+        return newReference;
+    }
+
     private static bool WasCalled = false;
 
     public static event Action? OnSave;

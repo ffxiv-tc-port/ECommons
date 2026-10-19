@@ -115,6 +115,8 @@ public partial class TaskManager : IDisposable
         MaxTasks = 0;
     }
 
+    private static string GetTaskName(TaskManagerTask task) => task.Name ?? task.Action.GetMethodInfo()?.Name;
+
     private void Tick(object _)
     {
         if(CurrentTask == null)
@@ -122,13 +124,13 @@ public partial class TaskManager : IDisposable
             if(ImmediateTasks.TryDequeue(out CurrentTask))
             {
                 if(ShowDebug)
-                    PluginLog.Debug($"Starting to execute immediate task: {CurrentTask.Name ?? CurrentTask.Action.GetMethodInfo()?.Name}");
+                    PluginLog.Debug($"Starting to execute immediate task: {GetTaskName(CurrentTask)}");
                 AbortAt = Environment.TickCount64 + CurrentTask.TimeLimitMS;
             }
             else if(Tasks.TryDequeue(out CurrentTask))
             {
                 if(ShowDebug)
-                    PluginLog.Debug($"Starting to execute task: {CurrentTask.Name ?? CurrentTask.Action.GetMethodInfo()?.Name}");
+                    PluginLog.Debug($"Starting to execute task: {GetTaskName(CurrentTask)}");
                 AbortAt = Environment.TickCount64 + CurrentTask.TimeLimitMS;
             }
             else
@@ -138,43 +140,57 @@ public partial class TaskManager : IDisposable
         }
         else
         {
+            // Capture the task we are about to run. A task is allowed to reschedule this very task manager
+            // from inside its own body (calling Abort() and enqueueing a new sequence is a common pattern),
+            // which sets CurrentTask to null while we are still inside this call. Reading the field again
+            // after the task has run would then dereference null.
+            var task = CurrentTask;
+            if(task == null) return;
             try
             {
-                var result = CurrentTask.Action();
+                var result = task.Action();
+                if(!ReferenceEquals(CurrentTask, task))
+                {
+                    // The task replaced or cleared the current task itself. Its decision wins: assigning
+                    // CurrentTask = null here would silently discard whatever it just scheduled.
+                    if(ShowDebug)
+                        PluginLog.Debug($"Task {GetTaskName(task)} rescheduled the task manager while running; leaving the new state untouched");
+                    return;
+                }
                 if(result == true)
                 {
                     if(ShowDebug)
-                        PluginLog.Debug($"Task {CurrentTask.Name ?? CurrentTask.Action.GetMethodInfo()?.Name} completed successfully");
+                        PluginLog.Debug($"Task {GetTaskName(task)} completed successfully");
                     CurrentTask = null;
                 }
                 else if(result == false)
                 {
                     if(Environment.TickCount64 > AbortAt)
                     {
-                        if(CurrentTask.AbortOnTimeout)
+                        if(task.AbortOnTimeout)
                         {
                             LogTimeout($"Clearing {Tasks.Count} remaining tasks because of timeout");
                             Tasks.Clear();
                             ImmediateTasks.Clear();
                         }
-                        throw new TimeoutException($"Task {CurrentTask.Name ?? CurrentTask.Action.GetMethodInfo()?.Name} took too long to execute");
+                        throw new TimeoutException($"Task {GetTaskName(task)} took too long to execute");
                     }
                 }
                 else
                 {
-                    PluginLog.Warning($"Clearing {Tasks.Count} remaining tasks because there was a signal from task {CurrentTask.Name ?? CurrentTask.Action.GetMethodInfo()?.Name} to abort");
+                    PluginLog.Warning($"Clearing {Tasks.Count} remaining tasks because there was a signal from task {GetTaskName(task)} to abort");
                     Abort();
                 }
             }
             catch(TimeoutException e)
             {
                 LogTimeout($"{e.Message}\n{e.StackTrace}");
-                CurrentTask = null;
+                if(ReferenceEquals(CurrentTask, task)) CurrentTask = null;
             }
             catch(Exception e)
             {
                 e.Log();
-                CurrentTask = null;
+                if(ReferenceEquals(CurrentTask, task)) CurrentTask = null;
             }
         }
     }

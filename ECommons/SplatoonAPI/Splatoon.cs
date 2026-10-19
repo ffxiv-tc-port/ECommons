@@ -5,6 +5,7 @@ using ECommons.Reflection;
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 
 namespace ECommons.SplatoonAPI;
 #nullable disable
@@ -233,7 +234,17 @@ public static class Splatoon
         }
         try
         {
-            Instance.GetType().GetMethod("InjectElement").Invoke(Instance, new object[] { e.Instance });
+            var args = Interlocked.Exchange(ref DisplayOnceArgs, null) ?? new object[1];
+            args[0] = e.Instance;
+            try
+            {
+                Instance.GetType().GetMethod("InjectElement").Invoke(Instance, args);
+            }
+            finally
+            {
+                args[0] = null;
+                Volatile.Write(ref DisplayOnceArgs, args);
+            }
             return true;
         }
         catch(Exception ex)
@@ -242,6 +253,10 @@ public static class Splatoon
             return false;
         }
     }
+
+    // 單格共用池：取用時換成 null（同時呼叫的另一方自己 new，不會共用同一份），歸還前清空才不會留住熱重載前的元素。
+    // 刻意不用 [ThreadStatic]：插件 ALC 的執行緒區域儲存踩 dotnet/runtime#135441。
+    private static object[] DisplayOnceArgs;
 
     /// <summary>
     /// Removes dynamic elements with specific name. If more than one element was registered under certain name, all of these elements will be removed.

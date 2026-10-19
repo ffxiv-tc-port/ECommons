@@ -3,6 +3,7 @@ using ECommons.DalamudServices;
 using ECommons.EzHookManager;
 using ECommons.Logging;
 using System;
+using System.Collections.Generic;
 #nullable disable
 
 namespace ECommons.Hooks;
@@ -15,25 +16,35 @@ public static class DirectorUpdate
     internal static Hook<ProcessDirectorUpdate> ProcessDirectorUpdateHook = null;
     private static Action<long, long, DirectorUpdateCategory, uint, uint, int, int> FullParamsCallback = null;
     private static Action<DirectorUpdateCategory> CategoryOnlyCallback = null;
+    /// <summary>
+    /// Delegate pointing at the original function address (no trampoline involved).
+    /// <see cref="Dispose"/> sets the hook field back to null; by that point Disable() and Dispose()
+    /// have already run and the original bytes are restored, so calling this delegate can not
+    /// recurse back into the detour.
+    /// </summary>
     private static ProcessDirectorUpdate OriginalDelegate;
     public static ProcessDirectorUpdate Delegate
     {
         get
         {
-            if(ProcessDirectorUpdateHook != null && !ProcessDirectorUpdateHook.IsDisposed)
+            // Snapshot once: Dispose() can null the field between two reads.
+            var hook = ProcessDirectorUpdateHook;
+            if(hook != null && !hook.IsDisposed)
             {
-                return ProcessDirectorUpdateHook.Original;
+                return hook.Original;
             }
             else
             {
-                OriginalDelegate ??= EzDelegate.Get<ProcessDirectorUpdate>(Sig);
-                return OriginalDelegate;
+                return OriginalDelegate ??= ResolveOriginal();
             }
         }
     }
 
     internal static long ProcessDirectorUpdateDetour_Full(long a1, long a2, DirectorUpdateCategory a3, uint a4, uint a5, int a6, int a7)
     {
+        // Dispose() sets ProcessDirectorUpdateHook back to null while this detour may still be
+        // executing. Snapshot it once and only use the local afterwards.
+        var hook = ProcessDirectorUpdateHook;
         try
         {
             FullParamsCallback(a1, a2, a3, a4, a5, a6, a7);
@@ -42,11 +53,20 @@ public static class DirectorUpdate
         {
             e.Log();
         }
-        return ProcessDirectorUpdateHook.Original(a1, a2, a3, a4, a5, a6, a7);
+        var original = hook?.OriginalDisposeSafe ?? OriginalDelegate;
+        if(original == null)
+        {
+            PluginLog.Information($"Director Update hook was disposed mid-call and no original delegate is available; skipping the original call for this invocation.");
+            return 0;
+        }
+        return original(a1, a2, a3, a4, a5, a6, a7);
     }
 
     internal static long ProcessDirectorUpdateDetour_Category(long a1, long a2, DirectorUpdateCategory a3, uint a4, uint a5, int a6, int a7)
     {
+        // Dispose() sets ProcessDirectorUpdateHook back to null while this detour may still be
+        // executing. Snapshot it once and only use the local afterwards.
+        var hook = ProcessDirectorUpdateHook;
         try
         {
             CategoryOnlyCallback(a3);
@@ -55,7 +75,13 @@ public static class DirectorUpdate
         {
             e.Log();
         }
-        return ProcessDirectorUpdateHook.Original(a1, a2, a3, a4, a5, a6, a7);
+        var original = hook?.OriginalDisposeSafe ?? OriginalDelegate;
+        if(original == null)
+        {
+            PluginLog.Information($"Director Update hook was disposed mid-call and no original delegate is available; skipping the original call for this invocation.");
+            return 0;
+        }
+        return original(a1, a2, a3, a4, a5, a6, a7);
     }
 
     public static void Init(Action<long, long, DirectorUpdateCategory, uint, uint, int, int> fullParamsCallback)
@@ -67,6 +93,7 @@ public static class DirectorUpdate
         if(Svc.SigScanner.TryScanText(Sig, out var ptr))
         {
             FullParamsCallback = fullParamsCallback;
+            OriginalDelegate ??= EzDelegate.Get<ProcessDirectorUpdate>(ptr);
             ProcessDirectorUpdateHook = Svc.Hook.HookFromAddress<ProcessDirectorUpdate>(ptr, ProcessDirectorUpdateDetour_Full);
             Enable();
             PluginLog.Information($"Requested Director Update hook and successfully initialized with FULL data");
@@ -86,6 +113,7 @@ public static class DirectorUpdate
         if(Svc.SigScanner.TryScanText(Sig, out var ptr))
         {
             CategoryOnlyCallback = categoryOnlyCallback;
+            OriginalDelegate ??= EzDelegate.Get<ProcessDirectorUpdate>(ptr);
             ProcessDirectorUpdateHook = Svc.Hook.HookFromAddress<ProcessDirectorUpdate>(ptr, ProcessDirectorUpdateDetour_Category);
             Enable();
             PluginLog.Information($"Requested Director Update hook and successfully initialized with CATEGORY ONLY data");
@@ -94,6 +122,17 @@ public static class DirectorUpdate
         {
             PluginLog.Error($"Could not find DirectorUpdate signature");
         }
+    }
+
+    // 特徵碼對不上時只掃一次、記一次 Warning；之後 Delegate 照舊擲 KeyNotFoundException（同訊息），不再每次重掃。
+    private static bool ResolveFailed;
+
+    private static ProcessDirectorUpdate ResolveOriginal()
+    {
+        if(!ResolveFailed && Svc.SigScanner.TryScanText(Sig, out var ptr)) return EzDelegate.Get<ProcessDirectorUpdate>(ptr);
+        if(!ResolveFailed) PluginLog.Warning($"DirectorUpdate: signature not found; DirectorUpdate.Delegate will throw until the plugin is reloaded ({Sig})");
+        ResolveFailed = true;
+        throw new KeyNotFoundException($"Can't find a signature of {Sig}");
     }
 
     public static void Enable()

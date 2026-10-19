@@ -42,7 +42,13 @@ public static unsafe class MacroManager
             using var macro = new Macro(macroPtr, string.Empty, commands.ToArray());
             Marshal.StructureToPtr(macro, macroPtr, false);
 
-            RaptureShellModule.Instance()->ExecuteMacro((FFXIVClientStructs.FFXIV.Client.UI.Misc.RaptureMacroModule.Macro*)macroPtr);
+            // 🔴 RaptureShellModule.Instance() 是手寫取得器(UIModule.Instance() 為 null 就回 null)。
+            // ExecuteMacro 是原生成員函式,對 null 的 this 呼叫會在遊戲碼裡解參考 ＝ AccessViolation,
+            // 而 AVE 是 corrupted-state exception,外層的 GenericHelpers.Safe 也攔不到。
+            // 擲一般例外則會被 Safe 攔下並記錄,巨集不執行;macroPtr 的釋放在 Safe 之外,不受影響。
+            var shell = RaptureShellModule.Instance();
+            if(shell == null) throw new InvalidOperationException("RaptureShellModule is not available; macro was not executed.");
+            shell->ExecuteMacro((FFXIVClientStructs.FFXIV.Client.UI.Misc.RaptureMacroModule.Macro*)macroPtr);
         });
 
         Marshal.FreeHGlobal(macroPtr);

@@ -10,11 +10,15 @@ public partial class AddonMaster
 
         public override string AddonDescription { get; } = "Island Sanctuary Main Hud";
 
-        public uint SanctuaryRank => Addon->AtkValues[11].UInt;
-        public uint CurrentIslandXP => Addon->AtkValues[12].UInt;
-        public uint NextIslandLevelXP => Addon->AtkValues[13].UInt;
-        public uint IslandersCowrie => Addon->AtkValues[14].UInt;
-        public uint SeafarersCowrie => Addon->AtkValues[17].UInt;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。
+        /// </remarks>
+        public uint SanctuaryRank => GenericHelpers.GetAtkValueUInt(Addon, 11);
+        public uint CurrentIslandXP => GenericHelpers.GetAtkValueUInt(Addon, 12);
+        public uint NextIslandLevelXP => GenericHelpers.GetAtkValueUInt(Addon, 13);
+        public uint IslandersCowrie => GenericHelpers.GetAtkValueUInt(Addon, 14);
+        public uint SeafarersCowrie => GenericHelpers.GetAtkValueUInt(Addon, 17);
 
         public AtkComponentButton* IsleventoryButton => Addon->GetComponentButtonById(20);
         public AtkComponentButton* SanctuaryCraftingLogButton => Addon->GetComponentButtonById(21);
@@ -31,7 +35,7 @@ public partial class AddonMaster
         public void SanctuaryGatheringLog() => ClickButtonIfEnabled(SanctuaryGatheringLogButton);
         public void ManageHideaway() => ClickButtonIfEnabled(ManageHideawayButton);
         public void MaterialAllocation() => ClickButtonIfEnabled(MaterialAllocationButton);
-        public void ManageMinions() => ClickButtonIfEnabled(ManageHideawayButton);
+        public void ManageMinions() => ClickButtonIfEnabled(ManageMinionButton);
         public void ManageFurnishing() => ClickButtonIfEnabled(ManageFurnishingButton);
         public void Guide() => ClickButtonIfEnabled(GuideButton);
     }

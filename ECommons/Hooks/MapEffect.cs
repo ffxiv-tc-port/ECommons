@@ -5,6 +5,7 @@ using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Client.Game.InstanceContent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using System;
+using System.Collections.Generic;
 
 namespace ECommons.Hooks;
 #nullable disable
@@ -17,6 +18,12 @@ public static unsafe class MapEffect
     public delegate long ProcessMapEffect(long a1, uint a2, ushort a3, ushort a4);
     internal static Hook<ProcessMapEffect> ProcessMapEffectHook = null;
     private static Action<long, uint, ushort, ushort> Callback = null;
+    /// <summary>
+    /// Delegate pointing at the original function address (no trampoline involved).
+    /// <see cref="Dispose"/> sets the hook field back to null; by that point Disable() and Dispose()
+    /// have already run and the original bytes are restored, so calling this delegate can not
+    /// recurse back into the detour.
+    /// </summary>
     private static ProcessMapEffect OriginalDelegate;
 
     private static class Ex
@@ -35,9 +42,13 @@ public static unsafe class MapEffect
             }
             else
             {
-                ProcessMapEffectEx0Hook = new(result[0], ProcessMapEffectEx0Detour);
-                ProcessMapEffectEx1Hook = new(result[1], ProcessMapEffectEx1Detour);
-                ProcessMapEffectEx2Hook = new(result[2], ProcessMapEffectEx2Detour);
+                // 先寫欄位再啟用：detour 一被呼叫就讀自己欄位的 Original。
+                ProcessMapEffectEx0Hook = new(result[0], ProcessMapEffectEx0Detour, false);
+                ProcessMapEffectEx0Hook.Enable();
+                ProcessMapEffectEx1Hook = new(result[1], ProcessMapEffectEx1Detour, false);
+                ProcessMapEffectEx1Hook.Enable();
+                ProcessMapEffectEx2Hook = new(result[2], ProcessMapEffectEx2Detour, false);
+                ProcessMapEffectEx2Hook.Enable();
             }
         }
 
@@ -87,20 +98,24 @@ public static unsafe class MapEffect
     {
         get
         {
-            if(ProcessMapEffectHook != null && !ProcessMapEffectHook.IsDisposed)
+            // Snapshot once: Dispose() can null the field between two reads.
+            var hook = ProcessMapEffectHook;
+            if(hook != null && !hook.IsDisposed)
             {
-                return ProcessMapEffectHook.Original;
+                return hook.Original;
             }
             else
             {
-                OriginalDelegate ??= EzDelegate.Get<ProcessMapEffect>(Sig);
-                return OriginalDelegate;
+                return OriginalDelegate ??= ResolveOriginal();
             }
         }
     }
 
     internal static long ProcessMapEffectDetour(long a1, uint a2, ushort a3, ushort a4)
     {
+        // Dispose() sets ProcessMapEffectHook back to null while this detour may still be
+        // executing. Snapshot it once and only use the local afterwards.
+        var hook = ProcessMapEffectHook;
         try
         {
             Callback(a1, a2, a3, a4);
@@ -109,7 +124,13 @@ public static unsafe class MapEffect
         {
             e.Log();
         }
-        return ProcessMapEffectHook.Original(a1, a2, a3, a4);
+        var original = hook?.OriginalDisposeSafe ?? OriginalDelegate;
+        if(original == null)
+        {
+            PluginLog.Information($"MapEffect hook was disposed mid-call and no original delegate is available; skipping the original call for this invocation.");
+            return 0;
+        }
+        return original(a1, a2, a3, a4);
     }
 
     public static void Init(Action<long, uint, ushort, ushort> fullParamsCallback)
@@ -121,6 +142,7 @@ public static unsafe class MapEffect
         if(Svc.SigScanner.TryScanText(Sig, out var ptr))
         {
             Callback = fullParamsCallback;
+            OriginalDelegate ??= EzDelegate.Get<ProcessMapEffect>(ptr);
             ProcessMapEffectHook = Svc.Hook.HookFromAddress<ProcessMapEffect>(ptr, ProcessMapEffectDetour);
             Enable();
             PluginLog.Information($"Requested MapEffect hook and successfully initialized");
@@ -130,6 +152,17 @@ public static unsafe class MapEffect
         {
             PluginLog.Error($"Could not find MapEffect signature");
         }
+    }
+
+    // 特徵碼對不上時只掃一次、記一次 Warning；之後 Delegate 照舊擲 KeyNotFoundException（同訊息），不再每次重掃。
+    private static bool ResolveFailed;
+
+    private static ProcessMapEffect ResolveOriginal()
+    {
+        if(!ResolveFailed && Svc.SigScanner.TryScanText(Sig, out var ptr)) return EzDelegate.Get<ProcessMapEffect>(ptr);
+        if(!ResolveFailed) PluginLog.Warning($"MapEffect: signature not found; MapEffect.Delegate will throw until the plugin is reloaded ({Sig})");
+        ResolveFailed = true;
+        throw new KeyNotFoundException($"Can't find a signature of {Sig}");
     }
 
     public static void Enable()

@@ -2,15 +2,17 @@
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Text;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Memory;
 using ECommons.DalamudServices;
 using ECommons.EzSharedDataManager;
 using ECommons.Logging;
-using FFXIVClientStructs.FFXIV.Client.UI;
+using ECommons.UIHelpers;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
 
 namespace ECommons.EzContextMenu;
@@ -78,28 +80,36 @@ public static unsafe class ContextMenuPrefixRemover
 
     private static void OnContextMenuUpdate(AddonEvent type, AddonArgs args)
     {
-        var addon = (AddonContextMenu*)args.Addon.Address;
-        var numEntries = addon->AtkValues[0].UInt;
+        var addon = (AtkUnitBase*)args.Addon.Address;
+        if(addon == null || addon->AtkValues == null || addon->AtkValuesCount <= 0) return;
+        // 推不出版面時不動任何字串（前綴照樣顯示）；項目索引一律限在 AtkValuesCount 之內。
+        if(!ContextMenuLayout.TryGetFirstEntryIndex(out var first)) return;
+        var available = addon->AtkValuesCount - first;
+        if(available <= 0) return;
+        var numEntries = (int)Math.Min(addon->AtkValues[0].UInt, (uint)available);
         for(var i = 0; i < numEntries; i++)
         {
-            var entry = addon->AtkValues[7 + i];
-            if(entry.Type.EqualsAny(ValueType.String, ValueType.ManagedString, ValueType.String8))
+            var entry = addon->AtkValues[first + i];
+            if(!entry.Type.EqualsAny(ValueType.String, ValueType.ManagedString, ValueType.String8) || entry.String.Value == null) continue;
+            var original = MemoryMarshal.CreateReadOnlySpanFromNullTerminated(entry.String.Value);
+            var seString = SeString.Parse(original);
+            if(seString.Payloads.Count < 2) continue;
+            var removed = false;
+            for(var x = 1; x < seString.Payloads.Count; x++)
             {
-                var seString = MemoryHelper.ReadSeStringNullTerminated((nint)entry.String.Value);
-                if(seString.Payloads.Count < 2) continue;
-                for(var x = 1; x < seString.Payloads.Count; x++)
+                if(seString.Payloads[x - 1] is UIForegroundPayload fg && fg.ColorKey == DalamudPrefixColor && seString.Payloads[x] is TextPayload payload && payload.Text != null && payload.Text.Length >= 1 && payload.Text[0] == (char)DalamudPrefix)
                 {
-                    {
-                        if(seString.Payloads[x - 1] is UIForegroundPayload fg && fg.ColorKey == DalamudPrefixColor && seString.Payloads[x] is TextPayload payload && payload.Text != null && payload.Text.Length >= 1 && payload.Text[0] == (char)DalamudPrefix)
-                        {
-                            seString.Payloads.RemoveAt(x);
-                            seString.Payloads.Add(new TextPayload("\0"));
-                            break;
-                        }
-                    }
+                    seString.Payloads.RemoveAt(x);
+                    seString.Payloads.Add(new TextPayload("\0"));
+                    removed = true;
+                    break;
                 }
-                MemoryHelper.WriteSeString((nint)entry.String.Value, seString);
             }
+            if(!removed) continue;
+            // 原地寫回：不可超過原字串加結尾 NUL 的長度。
+            var encoded = seString.Encode();
+            if(encoded.Length > original.Length + 1) continue;
+            Marshal.Copy(encoded, 0, (nint)entry.String.Value, encoded.Length);
         }
     }
 }

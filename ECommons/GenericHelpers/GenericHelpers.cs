@@ -288,7 +288,7 @@ public static unsafe partial class GenericHelpers
                || Svc.Condition[ConditionFlag.Fishing]
                || Svc.Condition[ConditionFlag.Transformed]
                || Svc.Condition[ConditionFlag.UsingHousingFunctions]
-               || Svc.ClientState.LocalPlayer?.IsTargetable != true;
+               || Svc.Objects.LocalPlayer?.IsTargetable != true;
     }
 
     /// <summary>
@@ -500,16 +500,36 @@ public static unsafe partial class GenericHelpers
         }
     }
 
+    // EqualityComparer<T>.Default：列舉／數值不裝箱、沒有閉包。與舊版 x.Equals(obj) 的差別只在
+    // null 元素（舊版擲 NullReferenceException）與 IEquatable<T>.Equals 和 Equals(object) 不一致的型別。
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool EqualsAny<T>(this T obj, params T[] values)
     {
-        return values.Any(x => x.Equals(obj));
+        ArgumentNullException.ThrowIfNull(values);
+        return EqualsAnyCore(obj, values);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool EqualsAny<T>(this T obj, IEnumerable<T> values)
     {
-        return values.Any(x => x.Equals(obj));
+        ArgumentNullException.ThrowIfNull(values);
+        if(values is T[] array) return EqualsAnyCore(obj, array);
+        // 只認確切型別 List<T>（與 Enumerable.Any 相同）：子類別可能重新實作列舉。
+        if(values.GetType() == typeof(List<T>)) return EqualsAnyCore(obj, CollectionsMarshal.AsSpan((List<T>)values));
+        foreach(var x in values)
+        {
+            if(EqualityComparer<T>.Default.Equals(x, obj)) return true;
+        }
+        return false;
+    }
+
+    private static bool EqualsAnyCore<T>(T obj, ReadOnlySpan<T> values)
+    {
+        foreach(var x in values)
+        {
+            if(EqualityComparer<T>.Default.Equals(x, obj)) return true;
+        }
+        return false;
     }
 
     public static void SetMinSize(this Window window, float width = 100, float height = 100) => SetMinSize(window, new Vector2(width, height));

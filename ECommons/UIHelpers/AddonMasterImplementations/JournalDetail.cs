@@ -11,7 +11,9 @@ public partial class AddonMaster
 
         public JournalDetail(void* addon) : base(addon) { }
 
-        public bool CanInitiate => Addon->InitiateButton->AtkResNode->IsVisible() && Addon->InitiateButton->IsEnabled;
+        public bool CanInitiate => Addon->InitiateButton != null
+            && GenericHelpers.IsComponentVisible(&Addon->InitiateButton->AtkComponentBase)
+            && GenericHelpers.IsComponentEnabled(Addon->InitiateButton);
 
         public override string AddonDescription { get; } = "Quest detail window";
 

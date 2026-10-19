@@ -16,7 +16,21 @@ public partial class AddonMaster
         {
         }
 
-        public SeString Price => GenericHelpers.ReadSeString(&Base->GetTextNodeById(10)->NodeText);
+        /// <remarks>
+        /// 🔴 <c>GetTextNodeById</c> 找不到節點時<b>合法回 null</b>,而 <c>&amp;node->NodeText</c>
+        /// 對 null 節點<b>不會當場崩</b>:<c>NodeText</c> 在 <c>AtkTextNode</c> 偏移 0xC0,
+        /// 算出的毒指標 0xC0 連 <c>ReadSeString</c> 內部的 <c>!= null</c> 都騙得過去,
+        /// 直到 <c>AsSpan()</c> 去讀位址 0xC0 才炸,崩潰現場完全指不到真因。
+        /// 取不到節點時回空字串(讀取型存取子⇒安靜回預設值,不寫 log)。
+        /// </remarks>
+        public SeString Price
+        {
+            get
+            {
+                var node = Base->GetTextNodeById(10);
+                return node == null ? string.Empty : GenericHelpers.ReadSeString(&node->NodeText);
+            }
+        }
         public int? Quantity { get => Addon->CardQuantityInput->Data.Value; set => Addon->CardQuantityInput->SetValue(value.HasValue ? (int)value : MinQuantity); }
         public int MinQuantity => Addon->CardQuantityInput->Data.Min;
         public int MaxQuantity => Addon->CardQuantityInput->Data.Max;

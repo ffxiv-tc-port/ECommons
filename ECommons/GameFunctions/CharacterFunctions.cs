@@ -42,9 +42,10 @@ public static unsafe class CharacterFunctions
 
     public static bool IsCharacterVisible(this ICharacter chr)
     {
-        var v = (IntPtr)(((FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)chr.Address)->GameObject.DrawObject);
-        if(v == IntPtr.Zero) return false;
-        return Bitmask.IsBitSet(*(byte*)(v + 136), 0);
+        var drawObject = ((FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)chr.Address)->GameObject.DrawObject;
+        if(drawObject == null) return false;
+        // 只看第 0 位；CS 的 DrawObject.IsVisible 判的是 0x09 兩位，語意不同。
+        return Bitmask.IsBitSet(drawObject->Flags, 0);
     }
 
     public static byte GetTransformationID(this ICharacter chr)

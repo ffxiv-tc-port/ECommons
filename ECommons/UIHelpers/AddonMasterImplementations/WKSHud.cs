@@ -12,15 +12,19 @@ public partial class AddonMaster
         public WKSHud(nint addon) : base(addon) { }
         public WKSHud(void* addon) : base(addon) { }
 
-        public AtkComponentButton* StellerMissionsButton => Addon->GetComponentButtonById(7);
-        public AtkComponentButton* MechOpsButton => Addon->GetComponentButtonById(8);
-        public AtkComponentButton* StellerSuccessButton => Addon->GetComponentButtonById(9);
-        public AtkComponentButton* InfrastructorIndexButton => Addon->GetComponentButtonById(10);
-        public AtkComponentButton* CosmicResearchButton => Addon->GetComponentButtonById(11);
-        public AtkComponentButton* CosmicClassTrackerButton => Addon->GetComponentButtonById(12);
+        public AtkComponentButton* StellerMissionsButton => ButtonByIdOrNull(7);
+        public AtkComponentButton* MechOpsButton => ButtonByIdOrNull(8);
+        public AtkComponentButton* StellerSuccessButton => ButtonByIdOrNull(9);
+        public AtkComponentButton* InfrastructorIndexButton => ButtonByIdOrNull(10);
+        public AtkComponentButton* CosmicResearchButton => ButtonByIdOrNull(11);
+        public AtkComponentButton* CosmicClassTrackerButton => ButtonByIdOrNull(12);
 
-        public int CosmoCredit => Addon->AtkValues[2].Int;
-        public int LunarCredit => Addon->AtkValues[6].Int;
+        /// <remarks>
+        /// 索引出界(addon 剛開窗/切頁時 <c>AtkValuesCount</c> 可能遠小於這裡寫死的索引)時回 0,
+        /// 詳見 <see cref="GenericHelpers.GetAtkValueInt"/>。
+        /// </remarks>
+        public int CosmoCredit => GenericHelpers.GetAtkValueInt(Addon, 2);
+        public int LunarCredit => GenericHelpers.GetAtkValueInt(Addon, 6);
 
         public override string AddonDescription => "Cosmic Exploration Main Hud Menu";
 

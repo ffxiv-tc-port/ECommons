@@ -106,7 +106,20 @@ public static unsafe class ExtendedPronoun
             {
                 var cand = ResolveInternal(stripped);
                 if(cand != null) return cand;
-                return FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance()->GetUIModule()->GetPronounModule()->ResolvePlaceholder($"{pronoun}", 0, 0);
+                // 🔴 與 PlayerFunctions.TryGetPlaceholder 同一條鏈,三層每一層都可能是 null,失敗都是 AccessViolation
+                //    (外面那圈 catch(Exception) 攔不到):① Framework.Instance() 是 [StaticAddress(..., isPointer: true)],
+                //    產生器對回傳值不判空,登入前/登出後/關閉中真的會是 null ② GetUIModule() 是 [MemberFunction] 原生呼叫
+                //    ③ GetPronounModule() 是 [VirtualFunction(10)],對 null 取 vtable 就是解參考 null。
+                // 取不到時回 null(＝「這個代名詞解不出物件」),與本函式其餘失敗出口的語意一致。
+                var framework = ECommons.GameHelpers.CSAddress.FrameworkOrNull();
+                if(framework == null) return null;
+                if(!ECommons.GameHelpers.CSAddress.Resolved(FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.MemberFunctionPointers.GetUIModule)) return null;
+                var uiModule = framework->GetUIModule();
+                if(uiModule == null) return null;
+                var pronounModule = uiModule->GetPronounModule();
+                if(pronounModule == null) return null;
+                if(!ECommons.GameHelpers.CSAddress.Resolved(FFXIVClientStructs.FFXIV.Client.UI.Misc.PronounModule.MemberFunctionPointers.ResolvePlaceholder)) return null;
+                return pronounModule->ResolvePlaceholder($"{pronoun}", 0, 0);
             }
         }
         catch(Exception e)
@@ -191,8 +204,8 @@ public static unsafe class ExtendedPronoun
     {
         if(modifier == "target")
         {
-            return (GameObject*)Svc.ClientState.LocalPlayer?.TargetObject?.Address;
+            return (GameObject*)Svc.Objects.LocalPlayer?.TargetObject?.Address;
         }
-        return (GameObject*)Svc.ClientState.LocalPlayer?.Address;
+        return (GameObject*)Svc.Objects.LocalPlayer?.Address;
     }
 }

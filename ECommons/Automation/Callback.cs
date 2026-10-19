@@ -22,9 +22,18 @@ public static unsafe class Callback
 
     public static readonly AtkValue ZeroAtkValue = new() { Type = 0, Int = 0 };
 
+    // 特徵碼對不上的結果也快取：失敗後 Fire／FireRaw 靜默不做事，不再每次重掃整段 .text 再擲。
+    private static bool ResolveFailed = false;
+
     internal static void Initialize()
     {
-        var ptr = Svc.SigScanner.ScanText(Sig);
+        if(ResolveFailed) return;
+        if(!Svc.SigScanner.TryScanText(Sig, out var ptr))
+        {
+            ResolveFailed = true;
+            PluginLog.Warning($"Callback: signature for AtkUnitBase.FireCallback not found; Callback.Fire/FireRaw will do nothing until the plugin is reloaded ({Sig})");
+            return;
+        }
         FireCallback = Marshal.GetDelegateForFunctionPointer<AtkUnitBase_FireCallbackDelegate>(ptr);
         PluginLog.Information($"Initialized Callback module, FireCallback = 0x{ptr:X16}");
     }
@@ -32,7 +41,8 @@ public static unsafe class Callback
     public static void InstallHook()
     {
         if(FireCallback == null) Initialize();
-        AtkUnitBase_FireCallbackHook ??= Svc.Hook.HookFromSignature<AtkUnitBase_FireCallbackDelegate>(Sig, AtkUnitBase_FireCallbackDetour);
+        if(FireCallback == null) return;
+        AtkUnitBase_FireCallbackHook ??=Svc.Hook.HookFromSignature<AtkUnitBase_FireCallbackDelegate>(Sig, AtkUnitBase_FireCallbackDetour);
         if(AtkUnitBase_FireCallbackHook.IsEnabled)
         {
             PluginLog.Error("AtkUnitBase_FireCallbackHook is already enabled");
@@ -46,9 +56,10 @@ public static unsafe class Callback
 
     public static void UninstallHook()
     {
-        if(FireCallback == null)
+        if(FireCallback == null || AtkUnitBase_FireCallbackHook == null)
         {
             PluginLog.Error("AtkUnitBase_FireCallbackHook not initialized yet");
+            return;
         }
         if(!AtkUnitBase_FireCallbackHook.IsEnabled)
         {
@@ -63,10 +74,16 @@ public static unsafe class Callback
 
     private static byte AtkUnitBase_FireCallbackDetour(AtkUnitBase* Base, int valueCount, AtkValue* values, byte updateState)
     {
-        var ret = AtkUnitBase_FireCallbackHook?.Original(Base, valueCount, values, updateState);
+        var ret = AtkUnitBase_FireCallbackHook?.OriginalDisposeSafe(Base, valueCount, values, updateState);
         try
         {
-            PluginLog.Debug($"Callback on {Base->Name.Read()}, valueCount={valueCount}, updateState={updateState}\n{DecodeValues(valueCount, values).Select(x => $"    {x}").Join("\n")}");
+            // hook 參數是遊戲直接傳進來的原生指標。Base 實務上是成員函式的 this、極少為 null，
+            // 但這一行是 detour 裡每次 FireCallback 都會跑到的路徑
+            //（PluginLog.Debug 的內插字串沒有寫入端閘門，Debug 關著也照樣求值），
+            // 漏判的代價是在 detour 裡吃 AccessViolation —— corrupted-state exception，
+            // 外面這個 try/catch 攔不到。取不到就印佔位字串，不要讓一行 log 把遊戲帶崩。
+            var name = Base == null ? "<null>" : Base->Name.Read();
+            PluginLog.Debug($"Callback on {name}, valueCount={valueCount}, updateState={updateState}\n{DecodeValues(valueCount, values).Select(x => $"    {x}").Join("\n")}");
         }
         catch(Exception e)
         {
@@ -78,7 +95,9 @@ public static unsafe class Callback
     public static void FireRaw(AtkUnitBase* Base, int valueCount, AtkValue* values, byte updateState = 0)
     {
         if(FireCallback == null) Initialize();
-        FireCallback(Base, valueCount, values, updateState);
+        var fire = FireCallback;
+        if(fire == null) return;
+        fire(Base, valueCount, values, updateState);
     }
 
     public static void Fire(AtkUnitBase* Base, bool updateState, params object[] values)
@@ -128,12 +147,15 @@ public static unsafe class Callback
                         throw new ArgumentException($"Unable to convert type {v.GetType()} to AtkValue");
                 }
             }
-            List<string> CallbackValues = [];
-            for(var i = 0; i < values.Length; i++)
+            if(LogGate.VerboseEnabled)
             {
-                CallbackValues.Add($"    Value {i}: [input: {values[i]}/{values[i]?.GetType().Name}] -> {DecodeValue(atkValues[i])})");
+                List<string> CallbackValues = [];
+                for(var i = 0; i < values.Length; i++)
+                {
+                    CallbackValues.Add($"    Value {i}: [input: {values[i]}/{values[i]?.GetType().Name}] -> {DecodeValue(atkValues[i])})");
+                }
+                PluginLog.Verbose($"Firing callback: {Base->Name.Read()}, valueCount = {values.Length}, updateStatte = {updateState}, values:\n");
             }
-            PluginLog.Verbose($"Firing callback: {Base->Name.Read()}, valueCount = {values.Length}, updateStatte = {updateState}, values:\n");
             FireRaw(Base, values.Length, atkValues, (byte)(updateState ? 1 : 0));
         }
         finally
@@ -208,5 +230,6 @@ public static unsafe class Callback
         AtkUnitBase_FireCallbackHook?.Dispose();
         AtkUnitBase_FireCallbackHook = null;
         FireCallback = null;
+        ResolveFailed = false;
     }
 }

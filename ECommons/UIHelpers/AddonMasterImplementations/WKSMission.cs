@@ -1,9 +1,7 @@
-﻿using Dalamud.Memory;
-using ECommons.Automation;
+﻿using ECommons.Automation;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using System.Collections.Generic;
 using Callback = ECommons.Automation.Callback;
-using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
 
 namespace ECommons.UIHelpers.AddonMasterImplementations;
 
@@ -18,32 +16,32 @@ public partial class AddonMaster
         public WKSMission(nint addon) : base(addon) { }
         public WKSMission(void* addon) : base(addon) { }
 
-        public AtkComponentButton* HelpButton => Addon->GetComponentButtonById(7);
-        public AtkComponentButton* MissionSelectionButton => Addon->GetComponentButtonById(8);
-        public AtkComponentButton* MissionLogButton => Addon->GetComponentButtonById(9);
-        public AtkComponentButton* BasicMissionsButton => Addon->GetComponentButtonById(13);
-        public AtkComponentButton* ProvisionalMissionsButton => Addon->GetComponentButtonById(14);
-        public AtkComponentButton* CriticalMissionsButton => Addon->GetComponentButtonById(15);
+        public AtkComponentButton* HelpButton => ButtonByIdOrNull(7);
+        public AtkComponentButton* MissionSelectionButton => ButtonByIdOrNull(8);
+        public AtkComponentButton* MissionLogButton => ButtonByIdOrNull(9);
+        public AtkComponentButton* BasicMissionsButton => ButtonByIdOrNull(13);
+        public AtkComponentButton* ProvisionalMissionsButton => ButtonByIdOrNull(14);
+        public AtkComponentButton* CriticalMissionsButton => ButtonByIdOrNull(15);
 
         /// <summary>
         /// Keeps the current number of missions that are displayed. <br></br>
         /// This includes the tabs seperating the missions by type [A, B, C, D]
         /// </summary>
-        public uint NumEntries => Addon->AtkValues[31].UInt;
+        /// <remarks>
+        /// 索引出界時回 0(＝一筆都不列),見 <see cref="GenericHelpers.GetAtkValueInt"/>。
+        /// </remarks>
+        public uint NumEntries => GenericHelpers.GetAtkValueUInt(Addon, 31);
 
-        public uint SelectedMissionId => Addon->AtkValues[1061].UInt;
-        public string SelectedMissionName
-        {
-            get
-            {
-                var missionName = Addon->AtkValues[1062];
-                if(missionName.Type.EqualsAny(ValueType.String, ValueType.ManagedString, ValueType.String8))
-                {
-                    return MemoryHelper.ReadSeStringNullTerminated((nint)missionName.String.Value).GetText();
-                }
-                return "n/a";
-            }
-        }
+        /// <inheritdoc cref="NumEntries"/>
+        public uint SelectedMissionId => GenericHelpers.GetAtkValueUInt(Addon, 1061);
+
+        /// <remarks>
+        /// 🔴 索引 1062 遠大於面板剛開窗時的 <c>AtkValuesCount</c>,而且型別對但指標為空時
+        /// 照樣是攔不到的 AccessViolationException。三道守衛見
+        /// <see cref="GenericHelpers.TryGetAtkValueSeString"/>。
+        /// 📌 讀不到時<b>維持既有的 "n/a"</b>,不改成空字串或 null(消費端可能在比對這個字面值)。
+        /// </remarks>
+        public string SelectedMissionName => GenericHelpers.GetAtkValueTextOrNull(Addon, 1062) ?? "n/a";
 
         public StellarMissions[] StellerMissions
         {
@@ -52,26 +50,23 @@ public partial class AddonMaster
                 var ret = new List<StellarMissions>();
                 for(var i = 0; i < NumEntries; i++)
                 {
-                    var missionName = Addon->AtkValues[802 + i * 2];
-                    var missionId = Addon->AtkValues[40 + i * 6].UInt;
+                    var missionId = GenericHelpers.GetAtkValueUInt(Addon, 40 + i * 6);
 
                     // category header?
                     if(missionId == 0)
                         continue;
 
-                    if(missionName.Type.EqualsAny(ValueType.String, ValueType.ManagedString, ValueType.String8))
-                    {
-                        var mission = new StellarMissions(this, i)
-                        {
-                            Name = MemoryHelper.ReadSeStringNullTerminated((nint)missionName.String.Value).GetText(),
-                            MissionId = missionId
-                        };
-                        ret.Add(mission);
-                    }
-                    else
-                    {
+                    // 🔴 三重守衛(邊界／型別／指標判空):索引 802+ 在面板未載滿時會出界,
+                    // 型別對但指標為空時是攔不到的 AVE。讀不到就當清單到此為止。
+                    if(!GenericHelpers.TryGetAtkValueSeString(Addon, 802 + i * 2, out var missionName))
                         break;
-                    }
+
+                    var mission = new StellarMissions(this, i)
+                    {
+                        Name = missionName.GetText(),
+                        MissionId = missionId
+                    };
+                    ret.Add(mission);
                 }
                 return [.. ret];
             }

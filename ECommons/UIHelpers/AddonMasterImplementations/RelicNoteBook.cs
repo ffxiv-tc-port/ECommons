@@ -83,7 +83,7 @@ public partial class AddonMaster
             }
 
             public AtkComponentCheckBox* CheckBox => checkbox;
-            public bool IsEnabled => CheckBox->IsEnabled;
+            public bool IsEnabled => GenericHelpers.IsComponentEnabled(CheckBox);
             public void Click() => addonMaster.ClickCheckboxIfEnabled(CheckBox);
         }
 
@@ -103,7 +103,7 @@ public partial class AddonMaster
             }
 
             public AtkComponentCheckBox* CheckBox => checkbox;
-            public bool IsEnabled => CheckBox->IsEnabled;
+            public bool IsEnabled => GenericHelpers.IsComponentEnabled(CheckBox);
             public void Click() => addonMaster.ClickCheckboxIfEnabled(CheckBox);
         }
 
@@ -123,7 +123,7 @@ public partial class AddonMaster
             }
 
             public AtkComponentCheckBox* CheckBox => checkbox;
-            public bool IsEnabled => CheckBox->IsEnabled;
+            public bool IsEnabled => GenericHelpers.IsComponentEnabled(CheckBox);
             public void Click() => addonMaster.ClickCheckboxIfEnabled(CheckBox);
         }
 
@@ -143,7 +143,7 @@ public partial class AddonMaster
             }
 
             public AtkComponentCheckBox* CheckBox => checkbox;
-            public bool IsEnabled => CheckBox->IsEnabled;
+            public bool IsEnabled => GenericHelpers.IsComponentEnabled(CheckBox);
             public void Click() => addonMaster.ClickCheckboxIfEnabled(CheckBox);
         };
 

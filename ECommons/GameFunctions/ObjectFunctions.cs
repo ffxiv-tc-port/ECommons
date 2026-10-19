@@ -3,6 +3,7 @@ using ECommons.DalamudServices;
 using ECommons.EzHookManager;
 using ECommons.Logging;
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -21,9 +22,34 @@ public static unsafe class ObjectFunctions
         return (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)o.Address;
     }
 
+    // 特徵碼對不上時只掃一次、記一次 Warning；之後 IsHostile／GetNameplateKind 照舊擲 KeyNotFoundException（同訊息），不再每次重掃。
+    private static bool GetNameplateColorFailed;
+
+    private static bool TryResolveGetNameplateColor()
+    {
+        if(GetNameplateColorNative != null) return true;
+        if(GetNameplateColorFailed) return false;
+        if(Svc.SigScanner.TryScanText(GetNameplateColorSig, out var addr))
+        {
+            GetNameplateColorNative = EzDelegate.Get<GetNameplateColorDelegate>(addr);
+            return true;
+        }
+        GetNameplateColorFailed = true;
+        PluginLog.Warning($"ObjectFunctions: signature for GetNameplateColor not found; IsHostile/GetNameplateKind will throw until the plugin is reloaded ({GetNameplateColorSig})");
+        return false;
+    }
+
+    private static GetNameplateColorDelegate GetNameplateColor()
+    {
+        var native = GetNameplateColorNative;
+        if(native != null) return native;
+        if(TryResolveGetNameplateColor()) return GetNameplateColorNative;
+        throw new KeyNotFoundException($"Can't find a signature of {GetNameplateColorSig}");
+    }
+
     internal static void Init()
     {
-        GetNameplateColorNative ??= EzDelegate.Get<GetNameplateColorDelegate>(GetNameplateColorSig);
+        TryResolveGetNameplateColor();
     }
 
     [Obsolete($"Use {nameof(IGameObject.IsTargetable)}")]
@@ -34,8 +60,7 @@ public static unsafe class ObjectFunctions
 
     public static bool IsHostile(this IGameObject a)
     {
-        GetNameplateColorNative ??= EzDelegate.Get<GetNameplateColorDelegate>(GetNameplateColorSig);
-        var plateType = GetNameplateColorNative(a.Address);
+        var plateType = GetNameplateColor()(a.Address);
         //4, 5, 6: Enemy players in PvP
         //7: yellow, can be attacked, not engaged
         //8: dead
@@ -53,14 +78,14 @@ public static unsafe class ObjectFunctions
             Svc.Log.Debug($"IGameObject or its address is null.");
         }
 
-        GetNameplateColorNative ??= EzDelegate.Get<GetNameplateColorDelegate>(GetNameplateColorSig);
-        if(GetNameplateColorNative == null)
+        var native = GetNameplateColor();
+        if(native == null)
         {
             // Log the error for debugging purposes
             Svc.Log.Debug($"Failed to get the native delegate for GetNameplateColor.");
         }
 
-        return (NameplateKind)GetNameplateColorNative(o.Address);
+        return (NameplateKind)native(o.Address);
     }
 
     public static int GetAttackableEnemyCountAroundPoint(Vector3 point, float radius)
@@ -83,9 +108,9 @@ public static unsafe class ObjectFunctions
 
     public static bool TryGetPartyMemberObjectByObjectId(uint objectId, out IGameObject partyMemberObject)
     {
-        if(objectId == Svc.ClientState.LocalPlayer?.GameObjectId)
+        if(objectId == Svc.Objects.LocalPlayer?.GameObjectId)
         {
-            partyMemberObject = Svc.ClientState.LocalPlayer;
+            partyMemberObject = Svc.Objects.LocalPlayer;
             return true;
         }
         foreach(var p in Svc.Party)
@@ -102,9 +127,9 @@ public static unsafe class ObjectFunctions
 
     public static bool TryGetPartyMemberObjectByAddress(IntPtr address, out IGameObject partyMemberObject)
     {
-        if(address == Svc.ClientState.LocalPlayer?.Address)
+        if(address == Svc.Objects.LocalPlayer?.Address)
         {
-            partyMemberObject = Svc.ClientState.LocalPlayer;
+            partyMemberObject = Svc.Objects.LocalPlayer;
             return true;
         }
         foreach(var p in Svc.Party)
