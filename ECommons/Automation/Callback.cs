@@ -103,8 +103,11 @@ public static unsafe class Callback
     public static void Fire(AtkUnitBase* Base, bool updateState, params object[] values)
     {
         if(Base == null) throw new Exception("Null UnitBase");
+        if(values == null) throw new ArgumentNullException(nameof(values), "Callback.Fire: values array is null (a lone null argument binds to the params array itself)");
         var atkValues = (AtkValue*)Marshal.AllocHGlobal(values.Length * sizeof(AtkValue));
         if(atkValues == null) return;
+        // AllocHGlobal 不清零：finally 依 Type 判斷要不要釋放字串，沒寫到的格子必須是 Undefined 而不是垃圾值。
+        NativeMemory.Clear(atkValues, (nuint)(values.Length * sizeof(AtkValue)));
         try
         {
             for(var i = 0; i < values.Length; i++)
@@ -130,12 +133,12 @@ public static unsafe class Callback
                         break;
                     case string stringValue:
                         {
-                            atkValues[i].Type = ValueType.String;
                             var stringBytes = Encoding.UTF8.GetBytes(stringValue);
                             var stringAlloc = Marshal.AllocHGlobal(stringBytes.Length + 1);
                             Marshal.Copy(stringBytes, 0, stringAlloc, stringBytes.Length);
                             Marshal.WriteByte(stringAlloc, stringBytes.Length, 0);
                             atkValues[i].String = (byte*)stringAlloc;
+                            atkValues[i].Type = ValueType.String;
                             break;
                         }
                     case AtkValue rawValue:
@@ -143,8 +146,10 @@ public static unsafe class Callback
                             atkValues[i] = rawValue;
                             break;
                         }
+                    case null:
+                        throw new ArgumentNullException(nameof(values), $"Callback.Fire: values[{i}] is null; null cannot be converted to AtkValue");
                     default:
-                        throw new ArgumentException($"Unable to convert type {v.GetType()} to AtkValue");
+                        throw new ArgumentException($"Callback.Fire: unable to convert values[{i}] of type {v.GetType()} to AtkValue");
                 }
             }
             if(LogGate.VerboseEnabled)
@@ -154,7 +159,7 @@ public static unsafe class Callback
                 {
                     CallbackValues.Add($"    Value {i}: [input: {values[i]}/{values[i]?.GetType().Name}] -> {DecodeValue(atkValues[i])})");
                 }
-                PluginLog.Verbose($"Firing callback: {Base->Name.Read()}, valueCount = {values.Length}, updateStatte = {updateState}, values:\n");
+                PluginLog.Verbose($"Firing callback: {Base->Name.Read()}, valueCount = {values.Length}, updateState = {updateState}, values:\n{string.Join("\n", CallbackValues)}");
             }
             FireRaw(Base, values.Length, atkValues, (byte)(updateState ? 1 : 0));
         }
